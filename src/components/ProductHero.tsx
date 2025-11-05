@@ -395,7 +395,7 @@ export const ProductHero = () => {
                       "[&::-webkit-scrollbar-thumb]:hover:bg-primary/60"
                     )}
                   >
-                    <div className="flex mt-1 gap-2 sm:gap-3 min-w-max">
+                    <div className="flex mt-1 gap-2 sm:gap-3 min-w-max mx-auto">
                       {allImages.map((image, index) => (
                         <button
                           key={`${image.colorKey || "additional"}-${index}`}
@@ -454,17 +454,17 @@ export const ProductHero = () => {
               className="space-y-4 sm:space-y-6 w-full max-w-md mx-auto"
             >
               <div>
-                <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold mb-3 sm:mb-4 leading-tight">
+                <h1 className="text-center md:text-left text-2xl sm:text-4xl md:text-5xl font-bold mb-3 sm:mb-4 leading-tight">
                   Cargador inalámbrico plegable 3 en 1
                 </h1>
-                <p className="text-base sm:text-xl text-muted-foreground">
+                <p className="text-center md:text-left text-base sm:text-xl text-muted-foreground">
                   Despídete del caos de cables – bienvenido al orden magnético
                 </p>
               </div>
 
               {/* Price */}
               <div className="border-t border-b py-3 sm:py-4">
-                <div className="flex flex-wrap items-baseline gap-2 sm:gap-3">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                   {quantity >= 2 && (
                     <span className="text-muted-foreground line-through text-lg sm:text-2xl">
                       S/.{(pricePerUnit1 * quantity).toFixed(2)}
@@ -490,10 +490,15 @@ export const ProductHero = () => {
                     )}
                   </p>
                 )}
-                <p className="text-xs sm:text-sm text-muted-foreground mt-2">
-                  Envío gratis incluido{" "}
-                  {quantity >= 2 && `• ${quantity} unidades`}
+                <p className="text-xs sm:text-sm text-muted-foreground mt-2 animate-pulse">
+                  Envío gratis incluido
                 </p>
+                <Badge
+                  variant="outline"
+                  className="text-xs sm:text-sm bg-amber-300 mt-3"
+                >
+                  🎁 Descuento extra al comprar 2 o más productos
+                </Badge>
               </div>
 
               {/* Color Selection */}
@@ -516,7 +521,7 @@ export const ProductHero = () => {
                   >
                     <MinusCircle className="w-5 h-5" />
                   </Button>
-                  <span className="text-2xl font-semibold w-16 text-center">
+                  <span className="text-2xl font-semibold w-16 text-center border rounded-md">
                     {quantity}
                   </span>
                   <Button

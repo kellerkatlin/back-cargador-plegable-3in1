@@ -1,11 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import {
-  Smartphone,
-  Watch,
-  Package,
-  Award,
-  ChevronRight,
-} from "lucide-react";
+import { Smartphone, Watch, Package, Award, Asterisk } from "lucide-react";
 import { motion } from "framer-motion";
 
 import Cargador from "@/assets/cargador.avif";
@@ -87,7 +81,10 @@ export const ProductSpecs = () => {
           transition={{ duration: 0.6 }}
           className="text-center mb-8 sm:mb-12"
         >
-          <Badge className="bg-primary/10 text-primary border-primary/20 text-xs sm:text-sm mb-4">
+          <Badge
+            variant="outline"
+            className="bg-primary/10 text-primary border-primary/20 text-xs sm:text-sm mb-4"
+          >
             Especificaciones Técnicas
           </Badge>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4">
@@ -136,7 +133,7 @@ export const ProductSpecs = () => {
                                 key={idx}
                                 className="text-xs sm:text-sm text-muted-foreground flex items-start gap-2"
                               >
-                                <ChevronRight className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                                <Asterisk className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
                                 <span>{item}</span>
                               </li>
                             ))}

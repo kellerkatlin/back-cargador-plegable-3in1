@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { X, Lock, Plus, Minus, CheckCircle, MessageCircle } from "lucide-react";
+import { Lock, Plus, Minus, CheckCircle, MessageCircle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -259,7 +259,7 @@ export const PurchaseModal = ({
             }
           })();
         },
-        onError: (err: unknown) => {},
+        //onError: (err: unknown) => {},
       }
     );
   };
@@ -308,7 +308,7 @@ export const PurchaseModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md mx-auto max-h-[90vh] overflow-y-auto bg-card border border-border rounded-ios shadow-float">
+      <DialogContent className="max-w-md w-[90vw] sm:w-auto mx-auto px-4 sm:px-0 max-h-[90vh] overflow-y-auto bg-card border border-border rounded-ios shadow-float">
         {successData ? (
           <div className="p-6 text-center space-y-6">
             <div className="flex justify-center">

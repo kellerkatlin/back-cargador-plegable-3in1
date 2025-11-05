@@ -203,7 +203,10 @@ export const Testimonials = () => {
           transition={{ duration: 0.6 }}
           className="text-center mb-12 sm:mb-16 space-y-3 sm:space-y-4"
         >
-          <Badge className="bg-primary/10 text-primary border-primary/20 text-xs sm:text-sm">
+          <Badge
+            variant="outline"
+            className="bg-primary/10 text-primary border-primary/20 text-xs sm:text-sm"
+          >
             Clientes Satisfechos
           </Badge>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold">

@@ -9,25 +9,57 @@ export const ProblemSolution = () => {
   const [sliderPosition, setSliderPosition] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
 
-  const handleMove = (
-    e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>
-  ) => {
-    if (!isDragging && e.type !== "click") return;
-
-    const container = e.currentTarget;
-    const rect = container.getBoundingClientRect();
-    const x = "touches" in e ? e.touches[0].clientX : e.clientX;
-    const position = ((x - rect.left) / rect.width) * 100;
-
+  const updatePositionFromClientX = (clientX: number, rect: DOMRect) => {
+    const position = ((clientX - rect.left) / rect.width) * 100;
     setSliderPosition(Math.min(Math.max(position, 0), 100));
   };
 
-  const handleMouseDown = () => setIsDragging(true);
-  const handleMouseUp = () => setIsDragging(false);
-  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => handleMove(e);
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    const container = e.currentTarget;
+    const rect = container.getBoundingClientRect();
+    updatePositionFromClientX(e.clientX, rect);
+    setIsDragging(true);
+    // capture pointer so we continue to receive events even if pointer leaves the element
+    try {
+      (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+    } catch {
+      /* noop - pointer capture may not be supported in some environments */
+    }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDragging) return;
+    const container = e.currentTarget;
+    const rect = container.getBoundingClientRect();
+    updatePositionFromClientX(e.clientX, rect);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    setIsDragging(false);
+    try {
+      (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* noop */
+    }
+  };
+
+  const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+    setIsDragging(false);
+    try {
+      (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* noop */
+    }
+  };
+
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const container = e.currentTarget;
+    const rect = container.getBoundingClientRect();
+    updatePositionFromClientX(e.clientX, rect);
+  };
   return (
     <section className="py-12 sm:py-20 px-0 bg-background">
-      <div className="container mx-auto ">
+      <div className="w-full container mx-auto overflow-x-hidden">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
@@ -36,7 +68,10 @@ export const ProblemSolution = () => {
           transition={{ duration: 0.6 }}
           className="text-center mb-12 sm:mb-16 space-y-3 sm:space-y-4"
         >
-          <Badge className="bg-primary/10 text-primary border-primary/20 text-xs sm:text-sm">
+          <Badge
+            variant="outline"
+            className="bg-primary/10 text-primary border-primary/20 text-xs sm:text-sm"
+          >
             ¿Por qué nosotros?
           </Badge>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold">
@@ -165,11 +200,12 @@ export const ProblemSolution = () => {
 
           <div
             className="relative aspect-video rounded-2xl overflow-hidden shadow-2xl cursor-ew-resize select-none"
-            onMouseMove={handleMove}
-            onTouchMove={handleMove}
-            onMouseDown={handleMouseDown}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
+            style={{ touchAction: "none" }}
+            onPointerMove={handlePointerMove}
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
+            onPointerLeave={handlePointerUp}
             onClick={handleClick}
             role="slider"
             aria-label="Comparar antes y después"
