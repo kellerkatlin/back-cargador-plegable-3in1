@@ -12,7 +12,7 @@ export default function AdminLogin() {
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
