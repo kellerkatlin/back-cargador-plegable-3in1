@@ -1,75 +1,27 @@
 import { useState } from "react";
-import axios from "axios";
+import { supabase } from "@/lib/supabase";
+import type { Customer } from "@/types/customer";
+import type { Order, OrderItem } from "@/types/order";
 
-const API_URL = import.meta.env.VITE_STRAPI_URL;
-const STRAPI_TOKEN = import.meta.env.VITE_STRAPI_TOKEN;
-
-/* ----------------------- Types ----------------------- */
-
-export interface CustomerPayload {
-  nombre: string;
-  apellido: string;
-  celular: string;
-  Direccion: string;
-  Distrito?: string;
-  Provincia?: string;
-  Departamento?: string;
-  Referencia?: string;
+interface PurchasePayload {
+  customer: Omit<Customer, "id">;
+  items: {
+    color: string;
+    cantidad: number;
+    precio_unitario: number;
+  }[];
 }
 
-export interface SalePayload {
-  quantity: number;
-  color: string;
-  unitPrice: number;
-  totalAmount: number;
+interface PurchaseResponse {
+  customer: Customer;
+  order: Order;
+  order_items: OrderItem[];
 }
 
-export interface PurchasePayload {
-  customer: CustomerPayload;
-  sale: SalePayload;
-}
-
-export interface StrapiEntity<T> {
-  id: number;
-  documentId: string;
-  attributes: T & {
-    createdAt: string;
-    updatedAt: string;
-    publishedAt?: string;
-  };
-}
-
-export interface CustomerResponseData {
-  nombre: string;
-  apellido: string;
-  celular: string;
-  Direccion: string;
-  Distrito?: string;
-  Provincia?: string;
-  Departamento?: string;
-  Referencia?: string;
-}
-
-export interface OrderResponseData {
-  orderCode?: string;
-  color: string;
-  quantity: number;
-  unitPrice: number;
-  totalAmount: number;
-  state: string;
-}
-
-export interface PurchaseResponse {
-  customer: StrapiEntity<CustomerResponseData>;
-  sale: StrapiEntity<OrderResponseData>;
-}
-
-export interface PurchaseOptions {
+interface PurchaseOptions {
   onSuccess?: (data: PurchaseResponse) => void;
   onError?: (error: unknown) => void;
 }
-
-/* ----------------------- Hook ----------------------- */
 
 export const usePurchase = () => {
   const [loading, setLoading] = useState(false);
@@ -82,66 +34,72 @@ export const usePurchase = () => {
     setLoading(true);
     setError(null);
 
+    const { customer, items } = payload;
+
     try {
-      /* ✅ 1. Crear Customer */
-      const resCustomer = await axios.post(
-        `${API_URL}/customers`,
-        { data: payload.customer },
-        { headers: { Authorization: `Bearer ${STRAPI_TOKEN}` } }
+      // ✅ 1. Crear CUSTOMER
+      const { data: customerData, error: customerError } = await supabase
+        .from("customers")
+        .insert({
+          nombre: customer.nombre,
+          apellido: customer.apellido,
+          numero: customer.numero,
+          direccion: customer.direccion,
+          referencia: customer.referencia,
+          distrito: customer.distrito,
+          provincia: customer.provincia,
+          departamento: customer.departamento,
+        })
+        .select()
+        .single();
+
+      if (customerError) throw customerError;
+
+      // ✅ 2. Calcular total
+      const total = items.reduce(
+        (acc, item) => acc + item.cantidad * item.precio_unitario,
+        0
       );
 
-      const customer = resCustomer.data
-        .data as StrapiEntity<CustomerResponseData>;
-      const customerDocumentId = customer.documentId;
+      // ✅ 3. Crear ORDER (relacionada al cliente)
+      const { data: orderData, error: orderError } = await supabase
+        .from("orders")
+        .insert({
+          total,
+          estado_pago: "pendiente",
+          estado_envio: "pendiente",
+          customer_id: customerData.id, // si en tu schema la FK es customer_id
+        })
+        .select()
+        .single();
 
-      if (!customerDocumentId)
-        throw new Error("No se generó documentId del cliente");
+      if (orderError) throw orderError;
 
-      /* ✅ 2. Crear Order (sin relación todavía) */
-      const resOrder = await axios.post(
-        `${API_URL}/orders`,
-        {
-          data: {
-            ...payload.sale,
-            state: "pending",
-          },
-        },
-        { headers: { Authorization: `Bearer ${STRAPI_TOKEN}` } }
-      );
+      // ✅ 4. Crear ORDER_ITEMS
+      const orderItems = items.map((item) => ({
+        order_id: orderData.id,
+        color: item.color,
+        cantidad: item.cantidad,
+        precio_unitario: item.precio_unitario,
+      }));
 
-      const sale = resOrder.data.data as StrapiEntity<OrderResponseData>;
-      const saleDocumentId = sale.documentId;
+      const { error: orderItemsError } = await supabase
+        .from("order_items")
+        .insert(orderItems);
 
-      if (!saleDocumentId)
-        throw new Error("No se generó documentId de la orden");
+      if (orderItemsError) throw orderItemsError;
 
-      /* ✅ 3. Asignar Order → Customer (Strapi 5 rules) */
-      await axios.put(
-        `${API_URL}/customers/${customerDocumentId}`,
-        {
-          data: {
-            orders: [saleDocumentId],
-          },
-        },
-        { headers: { Authorization: `Bearer ${STRAPI_TOKEN}` } }
-      );
+      const result: PurchaseResponse = {
+        customer: customerData,
+        order: orderData,
+        order_items: orderItems,
+      };
 
-      await axios.put(
-        `${API_URL}/orders/${saleDocumentId}`,
-        { data: { customer: customerDocumentId } },
-        { headers: { Authorization: `Bearer ${STRAPI_TOKEN}` } }
-      );
-
-      const result: PurchaseResponse = { customer, sale };
       options?.onSuccess?.(result);
       return result;
     } catch (err: any) {
-      const msg =
-        axios.isAxiosError(err) && err.response?.data?.error?.message
-          ? err.response.data.error.message
-          : "Error procesando compra";
-
-      setError(msg);
+      console.error("Error registrando compra:", err);
+      setError(err.message || "Error procesando la compra");
       options?.onError?.(err);
       return null;
     } finally {

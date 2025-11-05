@@ -23,6 +23,7 @@ import { ColorSelector } from "./ColorSelector";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { PurchaseModal } from "./PurchaseModal";
+import type { CartItem } from "@/types/cart";
 
 const productImages = {
   White: blancoImage,
@@ -57,15 +58,63 @@ export const ProductHero = () => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [orderItems, setOrderItems] = useState<CartItem[]>([]);
 
   // Precios
   const pricePerUnit1 = 159.9; // Precio para 1 unidad
   const pricePerUnit2Plus = 149.9; // Precio por unidad para 2+ unidades
   const originalPricePerUnit = 239.85; // Precio original tachado
 
+  // Calcular precio unitario basado en la cantidad
+  const currentUnitPrice = quantity >= 2 ? pricePerUnit2Plus : pricePerUnit1;
+
   // Calcular precio total
-  const totalPrice =
-    quantity === 1 ? pricePerUnit1 : pricePerUnit2Plus * quantity;
+  const totalPrice = currentUnitPrice * quantity;
+
+  // Actualizar items del pedido cuando cambia la cantidad o color principal
+  useEffect(() => {
+    setOrderItems((prevItems) => {
+      const newItems: CartItem[] = [];
+      for (let i = 0; i < quantity; i++) {
+        const existingItem = prevItems[i];
+        let itemColor = "Silvery";
+        if (existingItem) {
+          itemColor = existingItem.color;
+        }
+
+        // Si es el primer item, siempre usar selectedColor
+        if (i === 0) {
+          itemColor = selectedColor;
+        }
+
+        newItems.push({
+          id: `${i + 1}`,
+          color: itemColor,
+          quantity: 1,
+          unitPrice: currentUnitPrice,
+          subtotal: currentUnitPrice,
+        });
+      }
+      return newItems;
+    });
+  }, [quantity, selectedColor, currentUnitPrice]);
+
+  // Función para actualizar color de un item específico
+  const updateItemColor = (index: number, newColor: ColorKey) => {
+    const updatedItems = [...orderItems];
+    updatedItems[index] = { ...updatedItems[index], color: newColor };
+    setOrderItems(updatedItems);
+
+    // Si es el primer item, actualizar también el color principal
+    if (index === 0) {
+      setSelectedColor(newColor);
+    }
+  };
+
+  // Función para abrir modal
+  const openPurchaseModal = () => {
+    setIsModalOpen(true);
+  };
 
   // Para el scroll de miniaturas
   const thumbnailsRef = useRef<HTMLDivElement>(null);
@@ -535,17 +584,54 @@ export const ProductHero = () => {
                 </div>
               </div>
 
+              {/* Order Items Summary - Solo aparece cuando quantity > 1 */}
+              {quantity > 1 && (
+                <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                  <h3 className="text-sm font-semibold mb-2 text-gray-700">
+                    Colores seleccionados
+                  </h3>
+                  <div className="space-y-1.5">
+                    {orderItems.map((item, index) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between py-1.5 px-2 bg-white rounded text-xs"
+                      >
+                        <span className="text-gray-600">#{index + 1}</span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="scale-75">
+                            <ColorSelector
+                              selectedColor={item.color}
+                              onColorChange={(color) =>
+                                updateItemColor(index, color as ColorKey)
+                              }
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="border-t pt-2 mt-2 flex justify-between items-center">
+                      <span className="text-xs font-medium text-gray-600">
+                        {quantity} unidades
+                      </span>
+                      <span className="text-sm font-semibold text-primary">
+                        S/.{totalPrice.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* CTA Button */}
-              <Button
-                ref={inlineCtaRef}
-                size="lg"
-                className="w-full text-base sm:text-lg py-5 sm:py-6"
-                onClick={() => {
-                  setIsModalOpen(true);
-                }}
-              >
-                Ordenar Ahora - Pago Contraentrega
-              </Button>
+              <div className="space-y-3">
+                <Button
+                  ref={inlineCtaRef}
+                  size="lg"
+                  className="w-full text-base sm:text-lg py-5 sm:py-6"
+                  onClick={openPurchaseModal}
+                >
+                  Ordenar Ahora - Pago Contraentrega
+                </Button>
+              </div>
 
               {/* Trust Badges */}
               <div className="grid grid-cols-3 gap-2 sm:gap-3 pt-3 sm:pt-4">
@@ -637,6 +723,10 @@ export const ProductHero = () => {
           onClose={() => setIsModalOpen(false)}
           initialQuantity={quantity}
           selectedColor={selectedColor}
+          orderItems={orderItems}
+          onUpdateOrderItems={setOrderItems}
+          onQuantityChange={(newQty) => setQuantity(newQty)}
+          onColorChange={(newColor) => setSelectedColor(newColor as ColorKey)}
         />
       </section>
     </>

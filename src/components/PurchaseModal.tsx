@@ -30,7 +30,10 @@ import {
 import { ColorSelector } from "./ColorSelector";
 import { usePurchase } from "@/hooks/usePurchase";
 import { trackPixel, track } from "@/lib/pixel";
+import type { CartItem } from "@/types/cart";
 import rawUbigeo from "@/data/ubigeo.json";
+import type { Order } from "@/types/order";
+import type { Customer } from "@/types/customer";
 
 const PRODUCT_ID = "charger_typec_lightning";
 const BASE_PRICE = 159.9;
@@ -42,18 +45,18 @@ type UbigeoTree = Record<string, Record<string, Record<string, DistrictInfo>>>;
 const formSchema = z.object({
   nombre: z.string().min(2, "El nombre debe tener al menos 2 caracteres"),
   apellido: z.string().min(2, "El apellido debe tener al menos 2 caracteres"),
-  celular: z
+  numero: z
     .string()
     .min(9, "El número debe tener al menos 9 dígitos")
     .regex(/^[0-9]+$/, "Solo se permiten números"),
 
-  Direccion: z.string().min(5, "Ingresa una dirección completa"),
-  Distrito: z.string().min(1, "Selecciona un distrito"),
-  Departamento: z.string().min(1, "Selecciona una región"),
-  Provincia: z.string().min(1, "Selecciona una provincia"),
+  direccion: z.string().min(5, "Ingresa una dirección completa"),
+  distrito: z.string().min(1, "Selecciona un distrito"),
+  departamento: z.string().min(1, "Selecciona una región"),
+  provincia: z.string().min(1, "Selecciona una provincia"),
   // district is conditionally required: we validate manually on submit when districts are available
-  Referencia: z.string().optional(),
-  quantity: z.number().min(1),
+  referencia: z.string().optional(),
+  cantidad: z.number().min(1),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -62,7 +65,10 @@ interface PurchaseModalProps {
   isOpen: boolean;
   initialQuantity?: number;
   selectedColor?: string;
-
+  orderItems?: CartItem[];
+  onUpdateOrderItems?: (items: CartItem[]) => void;
+  onQuantityChange?: (quantity: number) => void;
+  onColorChange?: (color: string) => void;
   onClose: () => void;
 }
 
@@ -71,15 +77,21 @@ export const PurchaseModal = ({
   onClose,
   initialQuantity,
   selectedColor = "Silvery",
+  orderItems = [],
+  onUpdateOrderItems,
+  onQuantityChange,
+  onColorChange,
 }: PurchaseModalProps) => {
   const [successData, setSuccessData] = useState<null | {
-    sale: any;
-    customer: any;
+    order: Order;
+    customer: Customer;
   }>(null);
   const [ubigeo, setUbigeo] = useState<UbigeoTree | null>(null);
   const [selectedRegion, setSelectedRegion] = useState<string>("");
   const [selectedProvince, setSelectedProvince] = useState<string>("");
   const [currentColor, setCurrentColor] = useState<string>(selectedColor);
+  const [localOrderItems, setLocalOrderItems] =
+    useState<CartItem[]>(orderItems);
 
   useEffect(() => {
     setUbigeo(rawUbigeo as UbigeoTree);
@@ -89,6 +101,11 @@ export const PurchaseModal = ({
     setCurrentColor(selectedColor);
   }, [selectedColor]);
 
+  // Sincronizar localOrderItems cuando cambien los orderItems del padre
+  useEffect(() => {
+    setLocalOrderItems(orderItems);
+  }, [orderItems]);
+
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     mode: "onBlur", // muestra errores al salir del campo
@@ -96,13 +113,13 @@ export const PurchaseModal = ({
     defaultValues: {
       nombre: "",
       apellido: "",
-      celular: "",
-      Direccion: "",
-      Distrito: "",
-      Provincia: "",
-      Departamento: "",
-      Referencia: "",
-      quantity: initialQuantity ?? 1,
+      numero: "",
+      direccion: "",
+      distrito: "",
+      provincia: "",
+      departamento: "",
+      referencia: "",
+      cantidad: initialQuantity ?? 1,
     },
   });
 
@@ -121,13 +138,16 @@ export const PurchaseModal = ({
     return Object.keys(ubigeo[selectedRegion]?.[selectedProvince] || {}).sort();
   }, [ubigeo, selectedRegion, selectedProvince]);
 
-  const qty = form.watch("quantity");
+  const qty = form.watch("cantidad");
   const unitPrice = useMemo(
     () => (qty >= 2 ? TIER_PRICE_2PLUS : BASE_PRICE),
     [qty]
   );
   const subtotal = useMemo(() => BASE_PRICE * qty, [qty]);
-  const total = useMemo(() => unitPrice * qty, [unitPrice, qty]);
+  const total = useMemo(() => {
+    // Usar el precio calculado localmente basado en qty del formulario
+    return unitPrice * qty;
+  }, [unitPrice, qty]);
   const savingsPerUnit = useMemo(
     () => Math.max(0, BASE_PRICE - unitPrice),
     [unitPrice]
@@ -138,15 +158,72 @@ export const PurchaseModal = ({
   );
 
   useEffect(() => {
-    form.setValue("quantity", initialQuantity ?? 1);
+    form.setValue("cantidad", initialQuantity ?? 1);
   }, [initialQuantity, form]);
+
+  // Ajustar localOrderItems cuando cambia la cantidad dentro del modal
+  useEffect(() => {
+    // qty viene del formulario; asegurarse que localOrderItems tenga exactamente qty entries
+    setLocalOrderItems((prev) => {
+      const cur = [...prev];
+      if (qty <= 0) return cur;
+      if (cur.length === qty) return cur;
+
+      // Si se necesita aumentar
+      if (cur.length < qty) {
+        const toAdd = qty - cur.length;
+        const itemsToAdd: CartItem[] = new Array(toAdd)
+          .fill(0)
+          .map((_, idx) => ({
+            id: `${cur.length + idx + 1}`,
+            color: currentColor || selectedColor || "Silvery",
+            quantity: 1,
+            unitPrice: unitPrice,
+            subtotal: unitPrice,
+          }));
+        const next = [...cur, ...itemsToAdd];
+        if (onUpdateOrderItems) onUpdateOrderItems(next);
+        return next;
+      }
+
+      // Si se necesita reducir
+      if (cur.length > qty) {
+        const next = cur.slice(0, qty).map((it, i) => ({
+          ...it,
+          id: `${i + 1}`,
+        }));
+        if (onUpdateOrderItems) onUpdateOrderItems(next);
+        return next;
+      }
+      return cur;
+    });
+  }, [qty, currentColor, selectedColor, unitPrice, onUpdateOrderItems]);
+
+  // Actualizar color de un item local y propagar al padre si existe
+  const updateItemColor = (index: number, newColor: string) => {
+    setLocalOrderItems((prev) => {
+      const next = prev.map((it, i) =>
+        i === index ? { ...it, color: newColor } : it
+      );
+      if (onUpdateOrderItems) onUpdateOrderItems(next);
+      return next;
+    });
+    // si es el primer item, mantener currentColor sincronizado para el submit single
+    if (index === 0) {
+      setCurrentColor(newColor);
+      // Sincronizar con el componente padre
+      if (onColorChange) {
+        onColorChange(newColor);
+      }
+    }
+  };
 
   const purchase = usePurchase();
 
   const onSubmit = (data: FormData) => {
     // Si hay distritos disponibles para la provincia seleccionada, el distrito es obligatorio
-    if (availableDistricts.length > 0 && !data.Distrito) {
-      form.setError("Distrito", {
+    if (availableDistricts.length > 0 && !data.distrito) {
+      form.setError("distrito", {
         type: "required",
         message: "Selecciona un distrito",
       });
@@ -156,9 +233,9 @@ export const PurchaseModal = ({
     trackPixel("InitiateCheckout", {
       value: total,
       currency: "PEN",
-      contents: [{ id: PRODUCT_ID, quantity: data.quantity }],
+      contents: [{ id: PRODUCT_ID, quantity: data.cantidad }],
       content_type: "product",
-      num_items: data.quantity,
+      num_items: data.cantidad,
     });
 
     purchase.mutate(
@@ -166,31 +243,26 @@ export const PurchaseModal = ({
         customer: {
           nombre: data.nombre,
           apellido: data.apellido,
-          celular: data.celular,
-          Direccion: data.Direccion,
-          Distrito: data.Distrito,
-          Provincia: data.Provincia,
-          Departamento: data.Departamento,
-          Referencia: data.Referencia,
+          numero: data.numero,
+          direccion: data.direccion,
+          referencia: data.referencia ?? "",
+          distrito: data.distrito,
+          provincia: data.provincia,
+          departamento: data.departamento,
         },
-        sale: {
-          color: currentColor,
-          quantity: data.quantity,
-          unitPrice: Number(unitPrice.toFixed(2)), // manda el unitario con descuento si aplica
-          totalAmount: Number(total.toFixed(2)), // total final aplicado
-          // Si tu backend lo acepta, puedes enviar estos campos extra:
-          // discountPerUnit: Number(savingsPerUnit.toFixed(2)),
-          // totalDiscount: Number(totalSavings.toFixed(2)),
-          // productId: PRODUCT_ID,
-        },
+        items: localOrderItems.map((item) => ({
+          color: item.color,
+          cantidad: item.quantity,
+          precio_unitario: item.unitPrice,
+        })),
       },
       {
-        onSuccess: ({ sale, customer }) => {
+        onSuccess: ({ order, customer }) => {
           trackPixel("AddPaymentInfo", {
             value: total,
             currency: "PEN",
             contents: [
-              { id: PRODUCT_ID, quantity: form.getValues("quantity") },
+              { id: PRODUCT_ID, quantity: form.getValues("cantidad") },
             ],
             content_type: "product",
           });
@@ -206,8 +278,8 @@ export const PurchaseModal = ({
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
-                    event: "sale.created",
-                    sale,
+                    event: "order.created",
+                    order,
                     customer,
                   }),
                 });
@@ -227,12 +299,12 @@ export const PurchaseModal = ({
                     contents: [
                       {
                         id: PRODUCT_ID,
-                        quantity: form.getValues("quantity"),
+                        quantity: form.getValues("cantidad"),
                       },
                     ],
                     content_type: "product",
                   },
-                  { eventID: `sale_${sale.id}` }
+                  { eventID: `order_${order.id}` }
                 );
 
                 // ✅ Disparar Pixel TikTok (Purchase)
@@ -243,7 +315,7 @@ export const PurchaseModal = ({
                     contents: [
                       {
                         content_id: PRODUCT_ID, // ✅ explícito
-                        quantity: form.getValues("quantity"),
+                        quantity: form.getValues("cantidad"),
                         price: Number(unitPrice.toFixed(2)),
                       },
                     ],
@@ -255,7 +327,7 @@ export const PurchaseModal = ({
               }
 
               // Guardar datos de éxito en estado (mostrar mensaje final)
-              setSuccessData({ sale, customer });
+              setSuccessData({ order, customer });
             }
           })();
         },
@@ -265,27 +337,32 @@ export const PurchaseModal = ({
   };
 
   const handleQuantityChange = (increment: boolean) => {
-    const currentQuantity = form.getValues("quantity");
+    const currentQuantity = form.getValues("cantidad");
     const newQuantity = increment
       ? Math.min(currentQuantity + 1, 5)
       : Math.max(currentQuantity - 1, 1);
-    form.setValue("quantity", newQuantity, { shouldValidate: true });
+    form.setValue("cantidad", newQuantity, { shouldValidate: true });
+
+    // Sincronizar con el componente padre
+    if (onQuantityChange) {
+      onQuantityChange(newQuantity);
+    }
   };
 
   const handleDepartamentoChange = (value: string) => {
     setSelectedRegion(value);
     setSelectedProvince("");
-    form.setValue("Departamento", value, {
+    form.setValue("departamento", value, {
       shouldValidate: true,
       shouldTouch: true,
       shouldDirty: true,
     });
-    form.setValue("Provincia", "", {
+    form.setValue("provincia", "", {
       shouldValidate: true,
       shouldTouch: true,
       shouldDirty: true,
     });
-    form.setValue("Distrito", "", {
+    form.setValue("distrito", "", {
       shouldValidate: true,
       shouldTouch: true,
       shouldDirty: true,
@@ -294,12 +371,12 @@ export const PurchaseModal = ({
 
   const handleProvinciaChange = (value: string) => {
     setSelectedProvince(value);
-    form.setValue("Provincia", value, {
+    form.setValue("provincia", value, {
       shouldValidate: true,
       shouldTouch: true,
       shouldDirty: true,
     });
-    form.setValue("Distrito", "", {
+    form.setValue("distrito", "", {
       shouldValidate: true,
       shouldTouch: true,
       shouldDirty: true,
@@ -332,7 +409,7 @@ export const PurchaseModal = ({
                 Número de Orden
               </p>
               <p className="text-4xl font-bold text-primary font-mono">
-                #{successData.sale?.id || "N/A"}
+                #{successData.order?.id || "N/A"}
               </p>
               <div className="mt-4 pt-4 border-t border-primary/20 space-y-2">
                 <div className="flex justify-between text-sm">
@@ -355,7 +432,7 @@ export const PurchaseModal = ({
               <a
                 href={`https://wa.me/51932567344?text=${encodeURIComponent(
                   `Hola! Tengo una consulta sobre mi pedido #${
-                    successData.sale?.id || ""
+                    successData.order?.id || ""
                   }`
                 )}`}
                 target="_blank"
@@ -395,7 +472,7 @@ export const PurchaseModal = ({
               </div>
             </DialogHeader>
 
-            {/* Resumen del producto seleccionado con selector de color */}
+            {/* Resumen del producto seleccionado */}
             <div className="bg-muted/30 rounded-lg p-4 mb-4 space-y-3">
               <div>
                 <h3 className="text-sm font-semibold mb-3">Tu pedido:</h3>
@@ -403,18 +480,10 @@ export const PurchaseModal = ({
                   <div className="text-sm">
                     <p className="font-medium">Cargador 3 en 1</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Cantidad: {initialQuantity || 1}
+                      Cantidad: {qty}
                     </p>
                   </div>
                 </div>
-              </div>
-
-              {/* Selector de color */}
-              <div>
-                <ColorSelector
-                  selectedColor={currentColor}
-                  onColorChange={setCurrentColor}
-                />
               </div>
             </div>
 
@@ -466,7 +535,7 @@ export const PurchaseModal = ({
 
                 <FormField
                   control={form.control}
-                  name="celular"
+                  name="numero"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-sm font-medium text-foreground">
@@ -486,7 +555,7 @@ export const PurchaseModal = ({
                 />
                 <FormField
                   control={form.control}
-                  name="Direccion"
+                  name="direccion"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-sm font-medium text-foreground">
@@ -507,7 +576,7 @@ export const PurchaseModal = ({
                 <div className="grid grid-cols-1 gap-3">
                   <FormField
                     control={form.control}
-                    name="Departamento"
+                    name="departamento"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-sm font-medium text-foreground">
@@ -542,7 +611,7 @@ export const PurchaseModal = ({
                   {availableProvincias.length > 0 && (
                     <FormField
                       control={form.control}
-                      name="Provincia"
+                      name="provincia"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-sm font-medium text-foreground">
@@ -578,14 +647,21 @@ export const PurchaseModal = ({
                   {availableDistricts.length > 0 && (
                     <FormField
                       control={form.control}
-                      name="Distrito"
+                      name="distrito"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-sm font-medium text-foreground">
                             Distrito *
                           </FormLabel>
                           <Select
-                            onValueChange={field.onChange}
+                            onValueChange={(value) => {
+                              field.onChange(value);
+                              form.setValue("distrito", value, {
+                                shouldValidate: true,
+                                shouldTouch: true,
+                                shouldDirty: true,
+                              });
+                            }}
                             value={field.value}
                           >
                             <FormControl>
@@ -614,7 +690,7 @@ export const PurchaseModal = ({
 
                 <FormField
                   control={form.control}
-                  name="Referencia"
+                  name="referencia"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-sm font-medium text-foreground">
@@ -634,7 +710,7 @@ export const PurchaseModal = ({
 
                 <FormField
                   control={form.control}
-                  name="quantity"
+                  name="cantidad"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-sm font-medium text-foreground">
@@ -658,14 +734,20 @@ export const PurchaseModal = ({
                               className="h-12 text-center rounded-ios border-input focus:border-foreground"
                               {...field}
                               value={qty}
-                              onChange={(e) =>
-                                field.onChange(
-                                  Math.max(
-                                    1,
-                                    Math.min(5, parseInt(e.target.value) || 1)
+                              onChange={(e) => {
+                                const newQty = Math.max(
+                                  1,
+                                  Math.min(
+                                    5,
+                                    Number.parseInt(e.target.value) || 1
                                   )
-                                )
-                              }
+                                );
+                                field.onChange(newQty);
+                                // Sincronizar con el componente padre
+                                if (onQuantityChange) {
+                                  onQuantityChange(newQty);
+                                }
+                              }}
                             />
                           </div>
                           <button
@@ -682,6 +764,55 @@ export const PurchaseModal = ({
                     </FormItem>
                   )}
                 />
+
+                {/* Selector de color - aparece después de la cantidad */}
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-foreground">
+                    Selección de colores
+                  </h4>
+                  {qty === 1 ? (
+                    <div>
+                      <ColorSelector
+                        selectedColor={currentColor}
+                        onColorChange={(c) => {
+                          setCurrentColor(c);
+                          // Sincronizar con el componente padre
+                          if (onColorChange) {
+                            onColorChange(c);
+                          }
+                          // Actualizar localOrderItems si existe
+                          if (localOrderItems.length > 0) {
+                            const updatedItems = [
+                              { ...localOrderItems[0], color: c },
+                            ];
+                            setLocalOrderItems(updatedItems);
+                            if (onUpdateOrderItems)
+                              onUpdateOrderItems(updatedItems);
+                          }
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {localOrderItems.map((item, index) => (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between py-2 px-3 bg-muted/20 rounded-lg"
+                        >
+                          <span className="text-sm font-medium text-foreground">
+                            Unidad #{index + 1}
+                          </span>
+                          <div className="scale-75">
+                            <ColorSelector
+                              selectedColor={item.color}
+                              onColorChange={(c) => updateItemColor(index, c)}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 {/* Resumen con descuento */}
                 <div className="bg-muted/30 rounded-ios p-4 space-y-2">
