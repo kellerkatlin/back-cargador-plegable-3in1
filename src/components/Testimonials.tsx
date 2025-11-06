@@ -8,7 +8,7 @@ import { motion } from "framer-motion";
 interface Testimonial {
   id: number;
   name: string;
-  city: string;
+  department: string;
   rating: number;
   comment: string;
   image?: string;
@@ -18,7 +18,7 @@ interface Testimonial {
 
 interface ReviewFormData {
   name: string;
-  city: string;
+  department: string;
   rating: number;
   comment: string;
   productImage?: string;
@@ -28,10 +28,10 @@ const testimonials: Testimonial[] = [
   {
     id: 1,
     name: "María González",
-    city: "Bogotá",
+    department: "Lima",
     rating: 5,
     comment:
-      "¡Increíble! Ya no cargo con múltiples cables. El power bank es súper compacto y carga mis tres dispositivos a la vez. La mejor compra del año.",
+      "¡Increíble! Ya no cargo con múltiples cables. El producto es súper compacto y carga mis tres dispositivos a la vez. La mejor compra del año.",
     // image: "/src/assets/testimonial1.webp",
     // productImage: "/src/assets/blanco.webp",
     date: "Hace 2 días",
@@ -39,7 +39,7 @@ const testimonials: Testimonial[] = [
   {
     id: 2,
     name: "Carlos Ramírez",
-    city: "Medellín",
+    department: "Arequipa",
     rating: 5,
     comment:
       "Excelente calidad y muy rápida la carga. Lo uso todos los días para mi iPhone y AirPods. El diseño es elegante y moderno. 100% recomendado.",
@@ -50,7 +50,7 @@ const testimonials: Testimonial[] = [
   {
     id: 3,
     name: "Ana Sofía Torres",
-    city: "Cali",
+    department: "Lima",
     rating: 4.5,
     comment:
       "Me encanta lo portátil que es. Perfecto para viajar. La batería dura mucho más de lo que esperaba. Solo le daría 4.5 estrellas porque el precio es un poco alto, pero vale la pena.",
@@ -61,7 +61,7 @@ const testimonials: Testimonial[] = [
   {
     id: 4,
     name: "Diego Martínez",
-    city: "Barranquilla",
+    department: "Piura",
     rating: 5,
     comment:
       "La carga inalámbrica funciona perfecto con mi Samsung. Ya no necesito llevar cables al trabajo. La inversión valió cada peso.",
@@ -72,7 +72,7 @@ const testimonials: Testimonial[] = [
   {
     id: 5,
     name: "Laura Pérez",
-    city: "Cartagena",
+    department: "Lima",
     rating: 4,
     comment:
       "Buen producto, cumple con lo prometido. Me gusta que puedo cargar mi reloj mientras cargo el celular. La capacidad de 10,000 mAh es suficiente para todo el día.",
@@ -83,7 +83,7 @@ const testimonials: Testimonial[] = [
   {
     id: 6,
     name: "Andrés López",
-    city: "Bucaramanga",
+    department: "Lambayeque",
     rating: 5,
     comment:
       "Súper práctico y eficiente. Lo llevo en la mochila todos los días. La carga rápida de 15W es impresionante. Mi teléfono carga en menos de una hora.",
@@ -94,7 +94,7 @@ const testimonials: Testimonial[] = [
   {
     id: 7,
     name: "Valentina Ruiz",
-    city: "Pereira",
+    department: "Junín",
     rating: 4.5,
     comment:
       "Me salvó en un viaje largo. Pude cargar mi teléfono, tablet y auriculares sin problema. El diseño en gris es hermoso. Muy satisfecha con la compra.",
@@ -105,7 +105,7 @@ const testimonials: Testimonial[] = [
   {
     id: 8,
     name: "Juan Pablo Castro",
-    city: "Santa Marta",
+    department: "Ancash",
     rating: 5,
     comment:
       "Lo mejor que he comprado este año. Carga rápido y es muy ligero. Perfecto para llevar en el bolsillo. El soporte magnético es excelente.",
@@ -140,7 +140,7 @@ export const Testimonials = () => {
   const [hoverRating, setHoverRating] = useState(0);
   const [formData, setFormData] = useState<ReviewFormData>({
     name: "",
-    city: "",
+    department: "",
     rating: 0,
     comment: "",
     productImage: undefined,
@@ -160,7 +160,7 @@ export const Testimonials = () => {
 
     if (
       !formData.name ||
-      !formData.city ||
+      !formData.department ||
       formData.rating === 0 ||
       !formData.comment
     ) {
@@ -173,7 +173,7 @@ export const Testimonials = () => {
     // Resetear formulario
     setFormData({
       name: "",
-      city: "",
+      department: "",
       rating: 0,
       comment: "",
       productImage: undefined,
@@ -269,7 +269,7 @@ export const Testimonials = () => {
                       {testimonial.name}
                     </h3>
                     <p className="text-xs sm:text-sm text-muted-foreground">
-                      {testimonial.city}
+                      {testimonial.department}
                     </p>
                   </div>
                 </div>
@@ -335,7 +335,7 @@ export const Testimonials = () => {
           {!showForm ? (
             <div className="text-center bg-background rounded-2xl p-6 sm:p-8 border-2 border-dashed border-primary/30 hover:border-primary/50 transition-colors">
               <h3 className="text-xl sm:text-2xl font-bold mb-2">
-                ¿Ya compraste tu Power Bank?
+                ¿Ya compraste tu Cargador inalámbrico?
               </h3>
               <p className="text-sm sm:text-base text-muted-foreground mb-4">
                 Comparte tu experiencia con otros clientes
@@ -397,7 +397,7 @@ export const Testimonials = () => {
                   </div>
                 </div>
 
-                {/* Name and City */}
+                {/* Name and Department */}
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-semibold mb-2">
@@ -416,15 +416,15 @@ export const Testimonials = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-semibold mb-2">
-                      Ciudad <span className="text-destructive">*</span>
+                      Departamento <span className="text-destructive">*</span>
                     </label>
                     <input
                       type="text"
-                      value={formData.city}
+                      value={formData.department}
                       onChange={(e) =>
-                        setFormData({ ...formData, city: e.target.value })
+                        setFormData({ ...formData, department: e.target.value })
                       }
-                      placeholder="Tu ciudad"
+                      placeholder="Tu departamento (p. ej. Lima)"
                       className="w-full px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
                       required
                     />

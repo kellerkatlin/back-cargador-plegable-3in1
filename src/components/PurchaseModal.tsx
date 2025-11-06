@@ -574,14 +574,14 @@ export const PurchaseModal = ({
 
                 <div className="mt-2">
                   <p className="text-xs text-destructive font-semibold mt-2">
-                    Completa sus datos solo si está completamente seguro de
+                    Complete sus datos solo si está completamente seguro de
                     realizar la compra.
                   </p>
                 </div>
               </DialogHeader>
 
               {/* Resumen del producto seleccionado */}
-              <div className="bg-muted/30 rounded-lg p-4 mb-4 space-y-3">
+              <div className="bg-muted border rounded-lg p-4 mb-4 space-y-3">
                 <div>
                   <h3 className="text-sm font-semibold mb-3">Tu pedido:</h3>
                   <div className="flex items-center justify-between">
@@ -937,7 +937,7 @@ export const PurchaseModal = ({
                         />
                       </div>
                     ) : (
-                      <div className="space-y-2">
+                      <div className="max-h-80 overflow-y-auto space-y-2 border rounded-lg">
                         {localOrderItems.map((item, index) => (
                           <div
                             key={item.id}

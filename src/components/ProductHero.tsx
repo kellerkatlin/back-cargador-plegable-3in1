@@ -590,7 +590,7 @@ export const ProductHero = () => {
                   <h3 className="text-sm font-semibold mb-2 text-gray-700">
                     Colores seleccionados
                   </h3>
-                  <div className="space-y-1.5">
+                  <div className="max-h-80 overflow-y-auto space-y-1.5">
                     {orderItems.map((item, index) => (
                       <div
                         key={item.id}

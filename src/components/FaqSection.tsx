@@ -84,8 +84,12 @@ export function FaqSection() {
                 ¿Qué países pueden comprar?
               </AccordionTrigger>
               <AccordionContent className="text-sm text-gray-300 leading-relaxed">
-                Realizamos envíos a casi todo el mundo. Solo realiza tu pedido y
-                nos encargamos del resto.
+                Realizamos envíos únicamente dentro del Perú. Tiempos estimados:
+                <br />
+                <br />- Lima y Callao (días hábiles): <b>1 día</b>
+                <br />- Provincias (días hábiles): <b>3 días</b>
+                <br />
+                Por ahora no realizamos envíos internacionales.
               </AccordionContent>
             </AccordionItem>
 
