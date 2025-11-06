@@ -32,12 +32,19 @@ import { usePurchase } from "@/hooks/usePurchase";
 import { trackPixel, track } from "@/lib/pixel";
 import type { CartItem } from "@/types/cart";
 import rawUbigeo from "@/data/ubigeo.json";
-import type { Order } from "@/types/order";
+import type { Order, OrderItem } from "@/types/order";
 import type { Customer } from "@/types/customer";
 
 const PRODUCT_ID = "charger_typec_lightning";
 const BASE_PRICE = 159.9;
 const TIER_PRICE_2PLUS = 149.9;
+const DISCOUNT_PERCENTAGE = 8; // Porcentaje de descuento especial
+const colorMap: Record<string, string> = {
+  Black: "Negro",
+  White: "Blanco",
+  Gray: "Gris",
+  Silvery: "Plateado",
+};
 
 type DistrictInfo = { ubigeo: string; id: number; inei?: string };
 type UbigeoTree = Record<string, Record<string, Record<string, DistrictInfo>>>;
@@ -56,6 +63,7 @@ const formSchema = z.object({
   provincia: z.string().min(1, "Selecciona una provincia"),
   // district is conditionally required: we validate manually on submit when districts are available
   referencia: z.string().optional(),
+  dni: z.string().optional(), // DNI es opcional, validación condicional en submit
   cantidad: z.number().min(1),
 });
 
@@ -92,6 +100,8 @@ export const PurchaseModal = ({
   const [currentColor, setCurrentColor] = useState<string>(selectedColor);
   const [localOrderItems, setLocalOrderItems] =
     useState<CartItem[]>(orderItems);
+  const [showDiscountAlert, setShowDiscountAlert] = useState(false);
+  const [discountApplied, setDiscountApplied] = useState(false);
 
   useEffect(() => {
     setUbigeo(rawUbigeo as UbigeoTree);
@@ -119,6 +129,7 @@ export const PurchaseModal = ({
       provincia: "",
       departamento: "",
       referencia: "",
+      dni: "",
       cantidad: initialQuantity ?? 1,
     },
   });
@@ -138,28 +149,59 @@ export const PurchaseModal = ({
     return Object.keys(ubigeo[selectedRegion]?.[selectedProvince] || {}).sort();
   }, [ubigeo, selectedRegion, selectedProvince]);
 
+  // Determinar si se debe mostrar el campo DNI
+  const shouldShowDNI = useMemo(() => {
+    // No mostrar DNI si es Lima (departamento) y Lima (provincia), o si es Callao (departamento)
+    if (selectedRegion === "CALLAO") return false;
+    if (selectedRegion === "LIMA" && selectedProvince === "LIMA") return false;
+    // Mostrar DNI para cualquier otro caso donde haya departamento y provincia seleccionados
+    return selectedRegion && selectedProvince;
+  }, [selectedRegion, selectedProvince]);
+
   const qty = form.watch("cantidad");
   const unitPrice = useMemo(
     () => (qty >= 2 ? TIER_PRICE_2PLUS : BASE_PRICE),
     [qty]
   );
   const subtotal = useMemo(() => BASE_PRICE * qty, [qty]);
-  const total = useMemo(() => {
-    // Usar el precio calculado localmente basado en qty del formulario
+  const baseTotal = useMemo(() => {
+    // Precio base sin descuento adicional
     return unitPrice * qty;
   }, [unitPrice, qty]);
+  const total = useMemo(() => {
+    // Aplicar descuento del porcentaje definido si fue aceptado
+    if (discountApplied) {
+      return baseTotal * (1 - DISCOUNT_PERCENTAGE / 100);
+    }
+    return baseTotal;
+  }, [baseTotal, discountApplied]);
   const savingsPerUnit = useMemo(
     () => Math.max(0, BASE_PRICE - unitPrice),
     [unitPrice]
   );
-  const totalSavings = useMemo(
-    () => savingsPerUnit * qty,
-    [savingsPerUnit, qty]
-  );
+  const totalSavings = useMemo(() => {
+    // Ahorro base por cantidad (diferencia entre precio base y precio con descuento por cantidad)
+    const quantitySavings = savingsPerUnit * qty;
+
+    // Ahorro adicional por descuento especial (sobre el total ya con descuento por cantidad)
+    const specialDiscountSavings = discountApplied
+      ? baseTotal * (DISCOUNT_PERCENTAGE / 100)
+      : 0;
+
+    return quantitySavings + specialDiscountSavings;
+  }, [savingsPerUnit, qty, discountApplied, baseTotal]);
 
   useEffect(() => {
     form.setValue("cantidad", initialQuantity ?? 1);
   }, [initialQuantity, form]);
+
+  // Resetear descuento cuando se abre el modal
+  useEffect(() => {
+    if (isOpen) {
+      setDiscountApplied(false);
+      setShowDiscountAlert(false);
+    }
+  }, [isOpen]);
 
   // Ajustar localOrderItems cuando cambia la cantidad dentro del modal
   useEffect(() => {
@@ -229,6 +271,30 @@ export const PurchaseModal = ({
       });
       return;
     }
+
+    // Validar DNI si debe mostrarse (envíos fuera de Lima Metropolitana y Callao)
+    if (shouldShowDNI && (!data.dni || data.dni.trim().length !== 8)) {
+      form.setError("dni", {
+        type: "required",
+        message: "El DNI debe tener 8 dígitos",
+      });
+
+      // Hacer scroll al campo DNI para que sea visible
+      setTimeout(() => {
+        const dniField = document.querySelector('input[name="dni"]');
+        if (dniField) {
+          dniField.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+          // Enfocar el campo para mejor UX
+          (dniField as HTMLInputElement).focus();
+        }
+      }, 100);
+
+      return;
+    }
+
     // Pixel: valor real con descuento
     trackPixel("InitiateCheckout", {
       value: total,
@@ -249,15 +315,18 @@ export const PurchaseModal = ({
           distrito: data.distrito,
           provincia: data.provincia,
           departamento: data.departamento,
+          dni: shouldShowDNI ? data.dni : "", // Enviar DNI solo si debe mostrarse
         },
         items: localOrderItems.map((item) => ({
           color: item.color,
           cantidad: item.quantity,
-          precio_unitario: item.unitPrice,
+          precio_unitario: discountApplied
+            ? item.unitPrice * (1 - DISCOUNT_PERCENTAGE / 100)
+            : item.unitPrice,
         })),
       },
       {
-        onSuccess: ({ order, customer }) => {
+        onSuccess: ({ order, customer, order_items }) => {
           trackPixel("AddPaymentInfo", {
             value: total,
             currency: "PEN",
@@ -281,6 +350,18 @@ export const PurchaseModal = ({
                     event: "order.created",
                     order,
                     customer,
+                    order_items: order_items
+                      ? order_items.map((item: OrderItem) => ({
+                          ...item,
+                          color: colorMap[item.color] || item.color, // Traducir color del backend
+                        }))
+                      : localOrderItems.map((item) => ({
+                          color: colorMap[item.color] || item.color, // Traducir color local
+                          cantidad: item.quantity,
+                          precio_unitario: discountApplied
+                            ? item.unitPrice * (1 - DISCOUNT_PERCENTAGE / 100)
+                            : item.unitPrice,
+                        })),
                   }),
                 });
               } else {
@@ -383,549 +464,679 @@ export const PurchaseModal = ({
     });
   };
 
+  // Función para manejar el cierre del modal con descuento
+  const handleModalClose = () => {
+    // Solo mostrar descuento si no se ha aplicado ya y no es la vista de éxito
+    if (!discountApplied && !successData) {
+      setShowDiscountAlert(true);
+    } else {
+      onClose();
+    }
+  };
+
+  // Función para aceptar el descuento
+  const handleAcceptDiscount = () => {
+    setDiscountApplied(true);
+    setShowDiscountAlert(false);
+  };
+
+  // Función para rechazar el descuento
+  const handleRejectDiscount = () => {
+    setShowDiscountAlert(false);
+    onClose();
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md w-[90vw] sm:w-auto mx-auto px-4 sm:px-0 max-h-[90vh] overflow-y-auto bg-card border border-border rounded-ios shadow-float">
-        {successData ? (
-          <div className="p-6 text-center space-y-6">
-            <div className="flex justify-center">
-              <div className="rounded-full bg-green-100 p-4">
-                <CheckCircle className="w-16 h-16 text-green-600" />
+    <>
+      <Dialog open={isOpen} onOpenChange={handleModalClose}>
+        <DialogContent className="max-w-lg w-[95vw] sm:w-full mx-auto p-6 sm:p-8 max-h-[90vh] overflow-y-auto bg-background border-none rounded-2xl shadow-xl">
+          {successData ? (
+            <div className="p-8 md:p-12 text-center space-y-6">
+              <div className="flex justify-center">
+                <div className="rounded-full bg-green-100 p-4">
+                  <CheckCircle className="w-16 h-16 text-green-600" />
+                </div>
+              </div>
+
+              <div>
+                <h2 className="text-3xl font-bold text-foreground">
+                  ¡Pedido Confirmado!
+                </h2>
+                <p className="text-muted-foreground mt-3 text-base">
+                  Gracias por tu compra. En breve nos comunicaremos contigo para
+                  coordinar la entrega.
+                </p>
+              </div>
+
+              <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg p-6 border-2 border-primary/20">
+                <p className="text-sm text-muted-foreground mb-2">
+                  Número de Orden
+                </p>
+                <p className="text-4xl font-bold text-primary font-mono">
+                  #{successData.order?.id || "N/A"}
+                </p>
+                <div className="mt-4 pt-4 border-t border-primary/20 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Cliente:</span>
+                    <span className="font-semibold">
+                      {successData.customer?.nombre}{" "}
+                      {successData.customer?.apellido}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Cantidad:</span>
+                    <span className="font-semibold">
+                      {initialQuantity || 1} unidad(es)
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Total:</span>
+                    <span className="font-semibold">S/ {total.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <a
+                  href={`https://wa.me/51932567344?text=${encodeURIComponent(
+                    `Hola! Tengo una consulta sobre mi pedido #${
+                      successData.order?.id || ""
+                    }`
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block"
+                >
+                  <Button className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white py-6 text-base">
+                    <MessageCircle className="w-5 h-5" />
+                    Contactar por WhatsApp
+                  </Button>
+                </a>
+
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSuccessData(null);
+                    onClose();
+                  }}
+                  className="w-full"
+                >
+                  Cerrar
+                </Button>
               </div>
             </div>
+          ) : (
+            <>
+              <DialogHeader className="text-center pb-4">
+                <DialogTitle className="text-2xl font-semibold text-foreground">
+                  Completa tu compra contraentrega
+                </DialogTitle>
 
-            <div>
-              <h2 className="text-3xl font-bold text-foreground">
-                ¡Pedido Confirmado!
-              </h2>
-              <p className="text-muted-foreground mt-3 text-base">
-                Gracias por tu compra. En breve nos comunicaremos contigo para
-                coordinar la entrega.
+                <div className="mt-2">
+                  <p className="text-xs text-destructive font-semibold mt-2">
+                    Completa sus datos solo si está completamente seguro de
+                    realizar la compra.
+                  </p>
+                </div>
+              </DialogHeader>
+
+              {/* Resumen del producto seleccionado */}
+              <div className="bg-muted/30 rounded-lg p-4 mb-4 space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold mb-3">Tu pedido:</h3>
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm">
+                      <p className="font-medium">Cargador 3 en 1</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Cantidad: {qty}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <Form {...form}>
+                <form
+                  onSubmit={form.handleSubmit(onSubmit)}
+                  className="space-y-4"
+                >
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField
+                      control={form.control}
+                      name="nombre"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-medium text-foreground">
+                            Nombre *
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="Ariana"
+                              className="h-12 rounded-ios border-input focus:border-foreground"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage className="text-xs" />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="apellido"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-medium text-foreground">
+                            Apellido *
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="Gómez"
+                              className="h-12 rounded-ios border-input focus:border-foreground"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage className="text-xs" />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="numero"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm font-medium text-foreground">
+                          Celular / WhatsApp *
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            type="tel"
+                            placeholder="987654321"
+                            className="h-12 rounded-ios border-input focus:border-foreground"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage className="text-xs" />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="direccion"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm font-medium text-foreground">
+                          Dirección *
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Av. Arequipa 123, depto. 402"
+                            className="h-12 rounded-ios border-input focus:border-foreground"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage className="text-xs" />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-1 gap-3">
+                    <FormField
+                      control={form.control}
+                      name="departamento"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm font-medium text-foreground">
+                            Departamento *
+                          </FormLabel>
+                          <Select
+                            onValueChange={handleDepartamentoChange}
+                            value={field.value}
+                          >
+                            <FormControl>
+                              <SelectTrigger className="h-9 rounded-ios border-input focus:border-foreground">
+                                <SelectValue placeholder="Selecciona tu departamento" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent className="bg-background border border-border rounded-ios shadow-float">
+                              {availableDepartamentos.map((departamento) => (
+                                <SelectItem
+                                  key={departamento}
+                                  value={departamento}
+                                  className="rounded-ios"
+                                >
+                                  {departamento}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage className="text-xs" />
+                        </FormItem>
+                      )}
+                    />
+
+                    {availableProvincias.length > 0 && (
+                      <FormField
+                        control={form.control}
+                        name="provincia"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-sm font-medium text-foreground">
+                              Provincia *
+                            </FormLabel>
+                            <Select
+                              onValueChange={handleProvinciaChange}
+                              value={field.value}
+                            >
+                              <FormControl>
+                                <SelectTrigger className="h-12 rounded-ios border-input focus:border-foreground">
+                                  <SelectValue placeholder="Selecciona tu provincia" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent className="bg-background border border-border rounded-ios shadow-float text-sm max-h-48 overflow-y-auto">
+                                {availableProvincias.map((provincia) => (
+                                  <SelectItem
+                                    key={provincia}
+                                    value={provincia}
+                                    className="text-sm py-1.5"
+                                  >
+                                    {provincia}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage className="text-xs" />
+                          </FormItem>
+                        )}
+                      />
+                    )}
+
+                    {availableDistricts.length > 0 && (
+                      <FormField
+                        control={form.control}
+                        name="distrito"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-sm font-medium text-foreground">
+                              Distrito *
+                            </FormLabel>
+                            <Select
+                              onValueChange={(value) => {
+                                field.onChange(value);
+                                form.setValue("distrito", value, {
+                                  shouldValidate: true,
+                                  shouldTouch: true,
+                                  shouldDirty: true,
+                                });
+                              }}
+                              value={field.value}
+                            >
+                              <FormControl>
+                                <SelectTrigger className="h-12 rounded-ios border-input focus:border-foreground">
+                                  <SelectValue placeholder="Selecciona tu distrito" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent className="bg-background border border-border rounded-ios shadow-float">
+                                {availableDistricts.map((district) => (
+                                  <SelectItem
+                                    key={district}
+                                    value={district}
+                                    className="rounded-ios"
+                                  >
+                                    {district}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage className="text-xs" />
+                          </FormItem>
+                        )}
+                      />
+                    )}
+
+                    {/* Campo DNI - Solo para envíos fuera de Lima Metropolitana y Callao */}
+                    {shouldShowDNI && (
+                      <FormField
+                        control={form.control}
+                        name="dni"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-sm font-medium text-foreground">
+                              DNI *
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type="text"
+                                placeholder="12345678"
+                                maxLength={8}
+                                className="h-12 rounded-ios border-input focus:border-foreground"
+                                {...field}
+                                onChange={(e) => {
+                                  // Solo permitir números y máximo 8 caracteres
+                                  const value = e.target.value
+                                    .replace(/\D/g, "")
+                                    .slice(0, 8);
+                                  field.onChange(value);
+                                }}
+                              />
+                            </FormControl>
+                            <FormMessage className="text-xs" />
+                            <p className="text-xs text-muted-foreground mt-1">
+                              El DNI es necesario para registrar tu pedido por
+                              Shalom
+                            </p>
+                          </FormItem>
+                        )}
+                      />
+                    )}
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="referencia"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm font-medium text-foreground">
+                          Referencia
+                        </FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Frente al parque / Portón negro"
+                            className="min-h-[80px] rounded-ios border-input focus:border-foreground resize-none"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage className="text-xs" />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="cantidad"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm font-medium text-foreground">
+                          Cantidad *
+                        </FormLabel>
+                        <FormControl>
+                          <div className="flex items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => handleQuantityChange(false)}
+                              className="w-12 h-12 rounded-full border border-input bg-background hover:bg-muted/50 flex items-center justify-center transition-colors"
+                              disabled={qty <= 1}
+                            >
+                              <Minus className="w-4 h-4 text-foreground" />
+                            </button>
+                            <div className="flex-1 text-center">
+                              <Input
+                                type="number"
+                                min="1"
+                                max="5"
+                                className="h-12 text-center rounded-ios border-input focus:border-foreground"
+                                {...field}
+                                value={qty}
+                                onChange={(e) => {
+                                  const newQty = Math.max(
+                                    1,
+                                    Math.min(
+                                      5,
+                                      Number.parseInt(e.target.value) || 1
+                                    )
+                                  );
+                                  field.onChange(newQty);
+                                  // Sincronizar con el componente padre
+                                  if (onQuantityChange) {
+                                    onQuantityChange(newQty);
+                                  }
+                                }}
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleQuantityChange(true)}
+                              className="w-12 h-12 rounded-full border border-input bg-background hover:bg-muted/50 flex items-center justify-center transition-colors"
+                              disabled={qty >= 5}
+                            >
+                              <Plus className="w-4 h-4 text-foreground" />
+                            </button>
+                          </div>
+                        </FormControl>
+                        <FormMessage className="text-xs" />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Selector de color - aparece después de la cantidad */}
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium text-foreground">
+                      Selección de colores
+                    </h4>
+                    {qty === 1 ? (
+                      <div>
+                        <ColorSelector
+                          selectedColor={currentColor}
+                          onColorChange={(c) => {
+                            setCurrentColor(c);
+                            // Sincronizar con el componente padre
+                            if (onColorChange) {
+                              onColorChange(c);
+                            }
+                            // Actualizar localOrderItems si existe
+                            if (localOrderItems.length > 0) {
+                              const updatedItems = [
+                                { ...localOrderItems[0], color: c },
+                              ];
+                              setLocalOrderItems(updatedItems);
+                              if (onUpdateOrderItems)
+                                onUpdateOrderItems(updatedItems);
+                            }
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {localOrderItems.map((item, index) => (
+                          <div
+                            key={item.id}
+                            className="flex items-center justify-between py-2 px-3 bg-muted/20 rounded-lg"
+                          >
+                            <span className="text-sm font-medium text-foreground">
+                              Unidad #{index + 1}
+                            </span>
+                            <div className="scale-75">
+                              <ColorSelector
+                                selectedColor={item.color}
+                                onColorChange={(c) => updateItemColor(index, c)}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Resumen con descuento */}
+                  <div className="bg-muted/30 rounded-ios p-4 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">
+                        Precio unitario
+                      </span>
+                      <span className="text-sm font-medium">
+                        {qty >= 2 ? (
+                          <>
+                            <span className="line-through mr-2">
+                              S/ {BASE_PRICE.toFixed(2)}
+                            </span>
+                            <span className="text-success font-semibold">
+                              S/ {unitPrice.toFixed(2)}
+                            </span>
+                          </>
+                        ) : (
+                          <>S/ {unitPrice.toFixed(2)}</>
+                        )}
+                      </span>
+                    </div>
+                    {qty >= 2 && (
+                      <>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">
+                            Ahorro por unidad
+                          </span>
+                          <span className="text-sm text-success">
+                            - S/ {savingsPerUnit.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">
+                            Subtotal (sin descuento)
+                          </span>
+                          <span className="text-sm line-through">
+                            S/ {subtotal.toFixed(2)}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                    {discountApplied && (
+                      <div className="flex justify-between items-center bg-primary/10 px-2 py-1 rounded">
+                        <span className="text-sm font-medium text-primary">
+                          Descuento especial ({DISCOUNT_PERCENTAGE}%)
+                        </span>
+                        <span className="text-sm font-semibold text-primary">
+                          - S/{" "}
+                          {(baseTotal * (DISCOUNT_PERCENTAGE / 100)).toFixed(2)}
+                        </span>
+                      </div>
+                    )}{" "}
+                    <div className="flex justify-between items-center border-t border-border pt-2">
+                      <span className="text-lg font-semibold text-foreground">
+                        Total
+                      </span>
+                      <span className="text-xl font-bold text-foreground">
+                        S/ {total.toFixed(2)}
+                      </span>
+                    </div>
+                    {(qty >= 2 || discountApplied) && totalSavings > 0 && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-muted-foreground">
+                          Ahorro total
+                        </span>
+                        <span className="text-xs text-success">
+                          - S/ {totalSavings.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-3 pt-2">
+                    <Button
+                      type="submit"
+                      variant="default"
+                      size="lg"
+                      className="w-full h-12 bg-foreground text-background hover:bg-foreground/90 rounded-full font-medium"
+                      disabled={purchase.loading}
+                    >
+                      {purchase.loading ? "Procesando…" : "Realizar pedido"}
+                    </Button>
+
+                    <p className="text-xs font-semibold text-destructive mt-2">
+                      Para envíos contraentrega a provincia: adelanto de S/ 15
+                      para recojos por Shalom.
+                    </p>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="lg"
+                      className="w-full h-12 rounded-full font-medium"
+                      onClick={() => {
+                        const message = encodeURIComponent(
+                          `Hola, tengo algunas dudas sobre el cargador plegable 3 en 1 antes de realizar mi compra.`
+                        );
+                        window.open(
+                          `https://wa.me/51932567344?text=${message}`,
+                          "_blank"
+                        );
+                      }}
+                      disabled={purchase.loading}
+                    >
+                      Tengo dudas
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center justify-center gap-2 pt-2">
+                    <Lock className="w-4 h-4 text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground text-center">
+                      Pago 100% seguro. Tus datos solo se usan para coordinar la
+                      entrega.
+                    </p>
+                  </div>
+                </form>
+              </Form>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Descuento */}
+      <Dialog open={showDiscountAlert} onOpenChange={handleRejectDiscount}>
+        <DialogContent className="max-w-md w-[90vw] mx-auto p-6 bg-background border border-border rounded-2xl shadow-xl">
+          <DialogHeader className="text-center pb-4">
+            <DialogTitle className="text-2xl font-bold text-foreground">
+              🎉 ¡Oferta Especial!
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-6 text-center">
+            <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg p-6 border border-primary/20">
+              <h3 className="text-xl font-bold text-primary mb-2">
+                ¡{DISCOUNT_PERCENTAGE}% de Descuento Adicional!
+              </h3>
+              <p className="text-muted-foreground">
+                Aprovecha esta oferta limitada y ahorra aún más en tu compra
               </p>
             </div>
 
-            <div className="bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg p-6 border-2 border-primary/20">
-              <p className="text-sm text-muted-foreground mb-2">
-                Número de Orden
-              </p>
-              <p className="text-4xl font-bold text-primary font-mono">
-                #{successData.order?.id || "N/A"}
-              </p>
-              <div className="mt-4 pt-4 border-t border-primary/20 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Cliente:</span>
-                  <span className="font-semibold">
-                    {successData.customer?.nombre}{" "}
-                    {successData.customer?.apellido}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Cantidad:</span>
-                  <span className="font-semibold">
-                    {initialQuantity || 1} unidad(es)
-                  </span>
-                </div>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center text-sm">
+                <span>Precio actual:</span>
+                <span className="line-through">S/ {baseTotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center text-lg font-bold">
+                <span>Con descuento {DISCOUNT_PERCENTAGE}%:</span>
+                <span className="text-primary">
+                  S/ {(baseTotal * (1 - DISCOUNT_PERCENTAGE / 100)).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-sm text-green-600">
+                <span>Ahorras:</span>
+                <span className="font-semibold">
+                  S/ {(baseTotal * (DISCOUNT_PERCENTAGE / 100)).toFixed(2)}
+                </span>
               </div>
             </div>
 
             <div className="space-y-3">
-              <a
-                href={`https://wa.me/51932567344?text=${encodeURIComponent(
-                  `Hola! Tengo una consulta sobre mi pedido #${
-                    successData.order?.id || ""
-                  }`
-                )}`}
-                target="_blank"
-                rel="noreferrer"
-                className="block"
+              <Button
+                onClick={handleAcceptDiscount}
+                className="w-full bg-primary hover:bg-primary/90 text-white py-3 text-lg"
               >
-                <Button className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white py-6 text-base">
-                  <MessageCircle className="w-5 h-5" />
-                  Contactar por WhatsApp
-                </Button>
-              </a>
+                ¡Sí, aplicar descuento!
+              </Button>
 
               <Button
                 variant="outline"
-                onClick={() => {
-                  setSuccessData(null);
-                  onClose();
-                }}
-                className="w-full"
+                onClick={handleRejectDiscount}
+                className="w-full py-3"
               >
-                Cerrar
+                No gracias, aún no quiero
               </Button>
             </div>
           </div>
-        ) : (
-          <>
-            <DialogHeader className="text-center pb-4">
-              <DialogTitle className="text-2xl font-semibold text-foreground">
-                Completa tu compra contraentrega
-              </DialogTitle>
-
-              <div className="mt-2">
-                <p className="text-xs text-destructive font-semibold mt-2">
-                  Completa sus datos solo si está completamente seguro de
-                  realizar la compra.
-                </p>
-              </div>
-            </DialogHeader>
-
-            {/* Resumen del producto seleccionado */}
-            <div className="bg-muted/30 rounded-lg p-4 mb-4 space-y-3">
-              <div>
-                <h3 className="text-sm font-semibold mb-3">Tu pedido:</h3>
-                <div className="flex items-center justify-between">
-                  <div className="text-sm">
-                    <p className="font-medium">Cargador 3 en 1</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Cantidad: {qty}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <Form {...form}>
-              <form
-                onSubmit={form.handleSubmit(onSubmit)}
-                className="space-y-4"
-              >
-                <div className="grid grid-cols-2 gap-3">
-                  <FormField
-                    control={form.control}
-                    name="nombre"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-sm font-medium text-foreground">
-                          Nombre *
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="Ariana"
-                            className="h-12 rounded-ios border-input focus:border-foreground"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage className="text-xs" />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="apellido"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-sm font-medium text-foreground">
-                          Apellido *
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="Gómez"
-                            className="h-12 rounded-ios border-input focus:border-foreground"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage className="text-xs" />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name="numero"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-foreground">
-                        Celular / WhatsApp *
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          type="tel"
-                          placeholder="987654321"
-                          className="h-12 rounded-ios border-input focus:border-foreground"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage className="text-xs" />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="direccion"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-foreground">
-                        Dirección *
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Av. Arequipa 123, depto. 402"
-                          className="h-12 rounded-ios border-input focus:border-foreground"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage className="text-xs" />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="grid grid-cols-1 gap-3">
-                  <FormField
-                    control={form.control}
-                    name="departamento"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="text-sm font-medium text-foreground">
-                          Departamento *
-                        </FormLabel>
-                        <Select
-                          onValueChange={handleDepartamentoChange}
-                          value={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="h-9 rounded-ios border-input focus:border-foreground">
-                              <SelectValue placeholder="Selecciona tu departamento" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent className="bg-background border border-border rounded-ios shadow-float">
-                            {availableDepartamentos.map((departamento) => (
-                              <SelectItem
-                                key={departamento}
-                                value={departamento}
-                                className="rounded-ios"
-                              >
-                                {departamento}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage className="text-xs" />
-                      </FormItem>
-                    )}
-                  />
-
-                  {availableProvincias.length > 0 && (
-                    <FormField
-                      control={form.control}
-                      name="provincia"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-sm font-medium text-foreground">
-                            Provincia *
-                          </FormLabel>
-                          <Select
-                            onValueChange={handleProvinciaChange}
-                            value={field.value}
-                          >
-                            <FormControl>
-                              <SelectTrigger className="h-12 rounded-ios border-input focus:border-foreground">
-                                <SelectValue placeholder="Selecciona tu provincia" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent className="bg-background border border-border rounded-ios shadow-float text-sm max-h-48 overflow-y-auto">
-                              {availableProvincias.map((provincia) => (
-                                <SelectItem
-                                  key={provincia}
-                                  value={provincia}
-                                  className="text-sm py-1.5"
-                                >
-                                  {provincia}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage className="text-xs" />
-                        </FormItem>
-                      )}
-                    />
-                  )}
-
-                  {availableDistricts.length > 0 && (
-                    <FormField
-                      control={form.control}
-                      name="distrito"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-sm font-medium text-foreground">
-                            Distrito *
-                          </FormLabel>
-                          <Select
-                            onValueChange={(value) => {
-                              field.onChange(value);
-                              form.setValue("distrito", value, {
-                                shouldValidate: true,
-                                shouldTouch: true,
-                                shouldDirty: true,
-                              });
-                            }}
-                            value={field.value}
-                          >
-                            <FormControl>
-                              <SelectTrigger className="h-12 rounded-ios border-input focus:border-foreground">
-                                <SelectValue placeholder="Selecciona tu distrito" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent className="bg-background border border-border rounded-ios shadow-float">
-                              {availableDistricts.map((district) => (
-                                <SelectItem
-                                  key={district}
-                                  value={district}
-                                  className="rounded-ios"
-                                >
-                                  {district}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage className="text-xs" />
-                        </FormItem>
-                      )}
-                    />
-                  )}
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name="referencia"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-foreground">
-                        Referencia
-                      </FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Frente al parque / Portón negro"
-                          className="min-h-[80px] rounded-ios border-input focus:border-foreground resize-none"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage className="text-xs" />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="cantidad"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm font-medium text-foreground">
-                        Cantidad *
-                      </FormLabel>
-                      <FormControl>
-                        <div className="flex items-center gap-3">
-                          <button
-                            type="button"
-                            onClick={() => handleQuantityChange(false)}
-                            className="w-12 h-12 rounded-full border border-input bg-background hover:bg-muted/50 flex items-center justify-center transition-colors"
-                            disabled={qty <= 1}
-                          >
-                            <Minus className="w-4 h-4 text-foreground" />
-                          </button>
-                          <div className="flex-1 text-center">
-                            <Input
-                              type="number"
-                              min="1"
-                              max="5"
-                              className="h-12 text-center rounded-ios border-input focus:border-foreground"
-                              {...field}
-                              value={qty}
-                              onChange={(e) => {
-                                const newQty = Math.max(
-                                  1,
-                                  Math.min(
-                                    5,
-                                    Number.parseInt(e.target.value) || 1
-                                  )
-                                );
-                                field.onChange(newQty);
-                                // Sincronizar con el componente padre
-                                if (onQuantityChange) {
-                                  onQuantityChange(newQty);
-                                }
-                              }}
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleQuantityChange(true)}
-                            className="w-12 h-12 rounded-full border border-input bg-background hover:bg-muted/50 flex items-center justify-center transition-colors"
-                            disabled={qty >= 5}
-                          >
-                            <Plus className="w-4 h-4 text-foreground" />
-                          </button>
-                        </div>
-                      </FormControl>
-                      <FormMessage className="text-xs" />
-                    </FormItem>
-                  )}
-                />
-
-                {/* Selector de color - aparece después de la cantidad */}
-                <div className="space-y-3">
-                  <h4 className="text-sm font-medium text-foreground">
-                    Selección de colores
-                  </h4>
-                  {qty === 1 ? (
-                    <div>
-                      <ColorSelector
-                        selectedColor={currentColor}
-                        onColorChange={(c) => {
-                          setCurrentColor(c);
-                          // Sincronizar con el componente padre
-                          if (onColorChange) {
-                            onColorChange(c);
-                          }
-                          // Actualizar localOrderItems si existe
-                          if (localOrderItems.length > 0) {
-                            const updatedItems = [
-                              { ...localOrderItems[0], color: c },
-                            ];
-                            setLocalOrderItems(updatedItems);
-                            if (onUpdateOrderItems)
-                              onUpdateOrderItems(updatedItems);
-                          }
-                        }}
-                      />
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {localOrderItems.map((item, index) => (
-                        <div
-                          key={item.id}
-                          className="flex items-center justify-between py-2 px-3 bg-muted/20 rounded-lg"
-                        >
-                          <span className="text-sm font-medium text-foreground">
-                            Unidad #{index + 1}
-                          </span>
-                          <div className="scale-75">
-                            <ColorSelector
-                              selectedColor={item.color}
-                              onColorChange={(c) => updateItemColor(index, c)}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Resumen con descuento */}
-                <div className="bg-muted/30 rounded-ios p-4 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">
-                      Precio unitario
-                    </span>
-                    <span className="text-sm font-medium">
-                      {qty >= 2 ? (
-                        <>
-                          <span className="line-through mr-2">
-                            S/ {BASE_PRICE.toFixed(2)}
-                          </span>
-                          <span className="text-success font-semibold">
-                            S/ {unitPrice.toFixed(2)}
-                          </span>
-                        </>
-                      ) : (
-                        <>S/ {unitPrice.toFixed(2)}</>
-                      )}
-                    </span>
-                  </div>
-
-                  {qty >= 2 && (
-                    <>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-muted-foreground">
-                          Ahorro por unidad
-                        </span>
-                        <span className="text-sm text-success">
-                          - S/ {savingsPerUnit.toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-muted-foreground">
-                          Subtotal (sin descuento)
-                        </span>
-                        <span className="text-sm line-through">
-                          S/ {subtotal.toFixed(2)}
-                        </span>
-                      </div>
-                    </>
-                  )}
-
-                  <div className="flex justify-between items-center border-t border-border pt-2">
-                    <span className="text-lg font-semibold text-foreground">
-                      Total
-                    </span>
-                    <span className="text-xl font-bold text-foreground">
-                      S/ {total.toFixed(2)}
-                    </span>
-                  </div>
-
-                  {qty >= 2 && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-muted-foreground">
-                        Ahorro total
-                      </span>
-                      <span className="text-xs text-success">
-                        - S/ {totalSavings.toFixed(2)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-3 pt-2">
-                  <Button
-                    type="submit"
-                    variant="default"
-                    size="lg"
-                    className="w-full h-12 bg-foreground text-background hover:bg-foreground/90 rounded-full font-medium"
-                    disabled={purchase.loading}
-                  >
-                    {purchase.loading ? "Procesando…" : "Realizar pedido"}
-                  </Button>
-
-                  <p className="text-xs font-semibold text-destructive mt-2">
-                    Para envíos contraentrega a provincia: adelanto de S/ 10
-                    para recojos por Shalom.
-                  </p>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="lg"
-                    className="w-full h-12 rounded-full font-medium"
-                    onClick={() => {
-                      const message = encodeURIComponent(
-                        `Hola, tengo algunas dudas sobre el cargador plegable 3 en 1 antes de realizar mi compra.`
-                      );
-                      window.open(
-                        `https://wa.me/51932567344?text=${message}`,
-                        "_blank"
-                      );
-                    }}
-                    disabled={purchase.loading}
-                  >
-                    Tengo dudas
-                  </Button>
-                </div>
-
-                <div className="flex items-center justify-center gap-2 pt-2">
-                  <Lock className="w-4 h-4 text-muted-foreground" />
-                  <p className="text-xs text-muted-foreground text-center">
-                    Pago 100% seguro. Tus datos solo se usan para coordinar la
-                    entrega.
-                  </p>
-                </div>
-              </form>
-            </Form>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };

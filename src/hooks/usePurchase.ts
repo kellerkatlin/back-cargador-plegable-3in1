@@ -44,6 +44,7 @@ export const usePurchase = () => {
           nombre: customer.nombre,
           apellido: customer.apellido,
           numero: customer.numero,
+          dni: customer.dni ?? null,
           direccion: customer.direccion,
           referencia: customer.referencia,
           distrito: customer.distrito,

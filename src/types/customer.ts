@@ -8,4 +8,5 @@ export interface Customer {
   distrito: string;
   provincia: string;
   departamento: string;
+  dni?: string; // DNI opcional para envíos a provincia
 }
