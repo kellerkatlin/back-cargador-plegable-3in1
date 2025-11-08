@@ -18,12 +18,14 @@ import {
   ChevronRight,
   Home,
 } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { ColorSelector } from "./ColorSelector";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { PurchaseModal } from "./PurchaseModal";
 import type { CartItem } from "@/types/cart";
+import { useProduct } from "@/hooks/useProduct";
+import type { ProductVariant } from "@/types/product";
 
 const productImages = {
   White: blancoImage,
@@ -53,6 +55,14 @@ const additionalImages = [
 
 type ColorKey = keyof typeof productImages;
 
+// Mapeo de colores UI a nombres de variantes en DB
+const colorNameMap: Record<ColorKey, string> = {
+  White: "Blanco",
+  Gray: "Gris",
+  Black: "Negro",
+  Silvery: "Plateado",
+};
+
 export const ProductHero = () => {
   const [selectedColor, setSelectedColor] = useState<ColorKey>("Silvery");
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -60,7 +70,67 @@ export const ProductHero = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [orderItems, setOrderItems] = useState<CartItem[]>([]);
 
-  // Precios
+  // Fetch product variants from Supabase (todas las variantes, activas e inactivas)
+  const { product } = useProduct();
+
+  // Obtener variante del color seleccionado
+
+  // Obtener todas las variantes activas
+  const activeVariants = useMemo(
+    () =>
+      product?.product_variants?.filter(
+        (v: ProductVariant) => v.activo && v.stock > 0
+      ) || [],
+    [product]
+  );
+
+  // Crear lista de colores activos disponibles
+  const availableColors = useMemo(
+    () =>
+      (Object.keys(productImages) as ColorKey[]).filter((colorKey) => {
+        const variant = product?.product_variants?.find(
+          (v: ProductVariant) =>
+            v.color.toLowerCase() === colorNameMap[colorKey].toLowerCase()
+        );
+        return variant && variant.activo && variant.stock > 0;
+      }),
+    [product]
+  );
+
+  // Calcular el stock total disponible sumando todas las variantes activas
+  const totalAvailableStock = useMemo(
+    () => activeVariants.reduce((sum, variant) => sum + variant.stock, 0),
+    [activeVariants]
+  );
+
+  // Stock máximo disponible para el color seleccionado
+
+  // Función para obtener el stock de un color específico (MEMOIZADA)
+  const getColorStock = useCallback(
+    (colorKey: ColorKey): number => {
+      const variant = product?.product_variants?.find(
+        (v: ProductVariant) =>
+          v.color.toLowerCase() === colorNameMap[colorKey].toLowerCase()
+      );
+      return variant && variant.activo ? variant.stock : 0;
+    },
+    [product]
+  );
+
+  // Función para obtener colores disponibles (MEMOIZADA)
+  const getCurrentAvailableColors = useCallback((): ColorKey[] => {
+    return (Object.keys(productImages) as ColorKey[]).filter((colorKey) => {
+      const variant = product?.product_variants?.find(
+        (v: ProductVariant) =>
+          v.color.toLowerCase() === colorNameMap[colorKey].toLowerCase()
+      );
+      return variant && variant.activo && variant.stock > 0;
+    });
+  }, [product]);
+
+  // Validar stock de items seleccionados
+
+  // Precios hardcoded (NO desde Supabase)
   const pricePerUnit1 = 159.9; // Precio para 1 unidad
   const pricePerUnit2Plus = 149.9; // Precio por unidad para 2+ unidades
   const originalPricePerUnit = 239.85; // Precio original tachado
@@ -75,16 +145,64 @@ export const ProductHero = () => {
   useEffect(() => {
     setOrderItems((prevItems) => {
       const newItems: CartItem[] = [];
-      for (let i = 0; i < quantity; i++) {
-        const existingItem = prevItems[i];
-        let itemColor = "Silvery";
-        if (existingItem) {
-          itemColor = existingItem.color;
+      const currentAvailableColors = getCurrentAvailableColors();
+
+      // Función auxiliar para obtener el siguiente color disponible
+      const getNextAvailableColor = (currentItems: CartItem[]): ColorKey => {
+        // Contar colores ya seleccionados
+        const colorCounts: Record<string, number> = {};
+        for (const item of currentItems) {
+          colorCounts[item.color] = (colorCounts[item.color] || 0) + 1;
         }
 
-        // Si es el primer item, siempre usar selectedColor
+        // Buscar un color disponible con stock suficiente
+        for (const colorKey of currentAvailableColors) {
+          const stock = getColorStock(colorKey);
+          const currentCount = colorCounts[colorKey] || 0;
+
+          if (currentCount < stock) {
+            return colorKey; // Este color tiene stock disponible
+          }
+        }
+
+        // Si no hay colores disponibles, retornar el primer color disponible o selectedColor
+        return currentAvailableColors[0] || selectedColor;
+      };
+
+      for (let i = 0; i < quantity; i++) {
+        const existingItem = prevItems[i];
+        let itemColor: ColorKey = "Silvery";
+
+        if (existingItem) {
+          // Mantener el color existente si aún tiene stock
+          const existingColorStock = getColorStock(
+            existingItem.color as ColorKey
+          );
+          const colorCounts: Record<string, number> = {};
+          for (const item of newItems) {
+            colorCounts[item.color] = (colorCounts[item.color] || 0) + 1;
+          }
+          const currentCount = colorCounts[existingItem.color] || 0;
+
+          if (currentCount < existingColorStock) {
+            itemColor = existingItem.color as ColorKey;
+          } else {
+            // Si no hay stock, obtener el siguiente color disponible
+            itemColor = getNextAvailableColor(newItems);
+          }
+        } else {
+          // Nuevo item: obtener el siguiente color disponible
+          itemColor = getNextAvailableColor(newItems);
+        }
+
+        // Si es el primer item, siempre usar selectedColor si tiene stock
         if (i === 0) {
-          itemColor = selectedColor;
+          const selectedStock = getColorStock(selectedColor);
+          if (selectedStock > 0) {
+            itemColor = selectedColor;
+          } else {
+            itemColor = getNextAvailableColor([]);
+          }
         }
 
         newItems.push({
@@ -97,19 +215,45 @@ export const ProductHero = () => {
       }
       return newItems;
     });
-  }, [quantity, selectedColor, currentUnitPrice]);
+  }, [
+    quantity,
+    selectedColor,
+    currentUnitPrice,
+    getColorStock,
+    getCurrentAvailableColors,
+  ]);
 
   // Función para actualizar color de un item específico
-  const updateItemColor = (index: number, newColor: ColorKey) => {
-    const updatedItems = [...orderItems];
-    updatedItems[index] = { ...updatedItems[index], color: newColor };
-    setOrderItems(updatedItems);
+  const updateItemColor = useCallback(
+    (index: number, newColor: ColorKey) => {
+      const updatedItems = [...orderItems];
 
-    // Si es el primer item, actualizar también el color principal
-    if (index === 0) {
-      setSelectedColor(newColor);
-    }
-  };
+      // Verificar stock del nuevo color
+      const colorCounts: Record<string, number> = {};
+      updatedItems.forEach((item, i) => {
+        const itemColor = i === index ? newColor : item.color;
+        colorCounts[itemColor] = (colorCounts[itemColor] || 0) + 1;
+      });
+
+      // Verificar que el nuevo color tenga stock suficiente
+      const newColorStock = getColorStock(newColor);
+      const newColorCount = colorCounts[newColor] || 0;
+
+      if (newColorCount > newColorStock) {
+        // No permitir cambio si excede el stock
+        return;
+      }
+
+      updatedItems[index] = { ...updatedItems[index], color: newColor };
+      setOrderItems(updatedItems);
+
+      // Si es el primer item, actualizar también el color principal
+      if (index === 0) {
+        setSelectedColor(newColor);
+      }
+    },
+    [orderItems, getColorStock]
+  );
 
   // Función para abrir modal
   const openPurchaseModal = () => {
@@ -322,7 +466,8 @@ export const ProductHero = () => {
 
   const handleQuantityChange = (change: number) => {
     const newQty = quantity + change;
-    if (newQty >= 1 && newQty <= 10) {
+    // Limitar al stock total disponible (suma de todas las variantes)
+    if (newQty >= 1 && newQty <= totalAvailableStock) {
       setQuantity(newQty);
     }
   };
@@ -516,7 +661,7 @@ export const ProductHero = () => {
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                   {quantity >= 2 && (
                     <span className="text-muted-foreground line-through text-lg sm:text-2xl">
-                      S/.{(pricePerUnit1 * quantity).toFixed(2)}
+                      S/.{(originalPricePerUnit * quantity).toFixed(2)}
                     </span>
                   )}
                   {quantity === 1 && (
@@ -528,7 +673,7 @@ export const ProductHero = () => {
                     S/.{totalPrice.toFixed(2)}
                   </span>
                   <Badge variant="destructive" className="text-xs sm:text-sm">
-                    {quantity >= 2 ? "37% OFF" : "33% OFF"}
+                    {quantity >= 2 ? "60% OFF" : "50% OFF"}
                   </Badge>
                 </div>
                 {quantity >= 2 && (
@@ -555,6 +700,10 @@ export const ProductHero = () => {
                 <ColorSelector
                   selectedColor={selectedColor}
                   onColorChange={handleColorChange}
+                  availableColors={availableColors}
+                  getColorStock={(color: string) =>
+                    getColorStock(color as ColorKey)
+                  }
                 />
               </div>
 
@@ -577,11 +726,14 @@ export const ProductHero = () => {
                     variant="outline"
                     size="icon"
                     onClick={() => handleQuantityChange(1)}
-                    disabled={quantity >= 10}
+                    disabled={quantity >= Math.min(totalAvailableStock, 10)}
                   >
                     <PlusCircle className="w-5 h-5" />
                   </Button>
                 </div>
+                {totalAvailableStock === 0 && (
+                  <p className="text-xs text-red-600 font-semibold">Agotado</p>
+                )}
               </div>
 
               {/* Order Items Summary - Solo aparece cuando quantity > 1 */}
@@ -603,6 +755,10 @@ export const ProductHero = () => {
                               selectedColor={item.color}
                               onColorChange={(color) =>
                                 updateItemColor(index, color as ColorKey)
+                              }
+                              availableColors={availableColors}
+                              getColorStock={(color: string) =>
+                                getColorStock(color as ColorKey)
                               }
                             />
                           </div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -34,11 +34,23 @@ import type { CartItem } from "@/types/cart";
 import rawUbigeo from "@/data/ubigeo.json";
 import type { Order, OrderItem } from "@/types/order";
 import type { Customer } from "@/types/customer";
+import { useProduct } from "@/hooks/useProduct";
+import type { ProductVariant } from "@/types/product";
+import { toast } from "sonner";
 
 const PRODUCT_ID = "charger_typec_lightning";
 const BASE_PRICE = 159.9;
 const TIER_PRICE_2PLUS = 149.9;
 const DISCOUNT_PERCENTAGE = 8; // Porcentaje de descuento especial
+
+// Mapeo de colores UI a nombres de variantes en DB
+const colorNameMap: Record<string, string> = {
+  Black: "Negro",
+  White: "Blanco",
+  Gray: "Gris",
+  Silvery: "Plateado",
+};
+
 const colorMap: Record<string, string> = {
   Black: "Negro",
   White: "Blanco",
@@ -102,6 +114,68 @@ export const PurchaseModal = ({
     useState<CartItem[]>(orderItems);
   const [showDiscountAlert, setShowDiscountAlert] = useState(false);
   const [discountApplied, setDiscountApplied] = useState(false);
+  const [purchaseError, setPurchaseError] = useState<string | null>(null);
+
+  // Obtener información de producto y variantes desde Supabase
+  const { product } = useProduct();
+
+  // Función para obtener el stock de un color específico
+  const getColorStock = useCallback(
+    (colorKey: string): number => {
+      const normalizedColor = colorNameMap[colorKey] || colorKey;
+      const variant = product?.product_variants?.find(
+        (v: ProductVariant) =>
+          v.color.toLowerCase() === normalizedColor.toLowerCase() && v.activo
+      );
+      return variant ? variant.stock : 0;
+    },
+    [product]
+  );
+
+  // Obtener colores disponibles con stock
+  const availableColors = useMemo(() => {
+    if (!product?.product_variants) return [];
+    return Object.keys(colorNameMap).filter((colorKey) => {
+      const normalizedColor = colorNameMap[colorKey];
+      const variant = product.product_variants?.find(
+        (v: ProductVariant) =>
+          v.color.toLowerCase() === normalizedColor.toLowerCase() && v.activo
+      );
+      return variant && variant.stock > 0;
+    });
+  }, [product]);
+
+  // Calcular stock total disponible
+  const totalAvailableStock = useMemo(() => {
+    if (!product?.product_variants) return 0;
+    return product.product_variants
+      .filter((v: ProductVariant) => v.activo && v.stock > 0)
+      .reduce((sum: number, v: ProductVariant) => sum + v.stock, 0);
+  }, [product]);
+
+  // Validar que los items no excedan el stock disponible
+  const validateItemsStock = useCallback((): boolean => {
+    const colorCounts: Record<string, number> = {};
+
+    // Contar cuántas unidades de cada color hay
+    localOrderItems.forEach((item) => {
+      colorCounts[item.color] = (colorCounts[item.color] || 0) + 1;
+    });
+
+    // Verificar que ningún color exceda su stock
+    for (const [color, count] of Object.entries(colorCounts)) {
+      const stock = getColorStock(color);
+      if (count > stock) {
+        setPurchaseError(
+          `Stock insuficiente para el color ${color}. Disponible: ${stock}, Seleccionado: ${count}`
+        );
+        return false;
+      }
+    }
+
+    setPurchaseError(null);
+    return true;
+  }, [localOrderItems, getColorStock]);
 
   useEffect(() => {
     setUbigeo(rawUbigeo as UbigeoTree);
@@ -115,6 +189,13 @@ export const PurchaseModal = ({
   useEffect(() => {
     setLocalOrderItems(orderItems);
   }, [orderItems]);
+
+  // Resetear errores al abrir el modal
+  useEffect(() => {
+    if (isOpen) {
+      setPurchaseError(null);
+    }
+  }, [isOpen]);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -200,6 +281,7 @@ export const PurchaseModal = ({
     if (isOpen) {
       setDiscountApplied(false);
       setShowDiscountAlert(false);
+      setPurchaseError(null); // Resetear errores al abrir
     }
   }, [isOpen]);
 
@@ -214,17 +296,72 @@ export const PurchaseModal = ({
       // Si se necesita aumentar
       if (cur.length < qty) {
         const toAdd = qty - cur.length;
+
+        // Función para obtener el siguiente color disponible
+        const getNextAvailableColor = (): string => {
+          // Obtener colores disponibles en este momento
+          const currentAvailableColors = Object.keys(colorNameMap).filter(
+            (colorKey) => {
+              const normalizedColor = colorNameMap[colorKey] || colorKey;
+              const variant = product?.product_variants?.find(
+                (v: ProductVariant) =>
+                  v.color.toLowerCase() === normalizedColor.toLowerCase() &&
+                  v.activo
+              );
+              return variant && variant.stock > 0;
+            }
+          );
+
+          // Contar colores ya seleccionados
+          const colorCounts: Record<string, number> = {};
+          for (const item of cur) {
+            colorCounts[item.color] = (colorCounts[item.color] || 0) + 1;
+          }
+
+          // Buscar un color disponible con stock suficiente
+          for (const colorKey of currentAvailableColors) {
+            const normalizedColor = colorNameMap[colorKey] || colorKey;
+            const variant = product?.product_variants?.find(
+              (v: ProductVariant) =>
+                v.color.toLowerCase() === normalizedColor.toLowerCase() &&
+                v.activo
+            );
+            const stock = variant ? variant.stock : 0;
+            const currentCount = colorCounts[colorKey] || 0;
+
+            if (currentCount < stock) {
+              return colorKey; // Este color tiene stock disponible
+            }
+          }
+
+          // Si no hay colores disponibles, retornar el primer color disponible o currentColor
+          return (
+            currentAvailableColors[0] ||
+            currentColor ||
+            selectedColor ||
+            "Silvery"
+          );
+        };
+
         const itemsToAdd: CartItem[] = new Array(toAdd)
           .fill(0)
-          .map((_, idx) => ({
-            id: `${cur.length + idx + 1}`,
-            color: currentColor || selectedColor || "Silvery",
-            quantity: 1,
-            unitPrice: unitPrice,
-            subtotal: unitPrice,
-          }));
+          .map((_, idx) => {
+            // Para cada nuevo item, obtener el siguiente color disponible
+            const colorToUse = getNextAvailableColor();
+
+            return {
+              id: `${cur.length + idx + 1}`,
+              color: colorToUse,
+              quantity: 1,
+              unitPrice: unitPrice,
+              subtotal: unitPrice,
+            };
+          });
         const next = [...cur, ...itemsToAdd];
-        if (onUpdateOrderItems) onUpdateOrderItems(next);
+        if (onUpdateOrderItems) {
+          // Ejecutar después del render para evitar el error
+          setTimeout(() => onUpdateOrderItems(next), 0);
+        }
         return next;
       }
 
@@ -234,15 +371,45 @@ export const PurchaseModal = ({
           ...it,
           id: `${i + 1}`,
         }));
-        if (onUpdateOrderItems) onUpdateOrderItems(next);
+        if (onUpdateOrderItems) {
+          // Ejecutar después del render para evitar el error
+          setTimeout(() => onUpdateOrderItems(next), 0);
+        }
         return next;
       }
       return cur;
     });
-  }, [qty, currentColor, selectedColor, unitPrice, onUpdateOrderItems]);
+  }, [
+    qty,
+    currentColor,
+    selectedColor,
+    unitPrice,
+    onUpdateOrderItems,
+    product,
+  ]);
 
-  // Actualizar color de un item local y propagar al padre si existe
+  // Actualizar color de un item local y validar stock
   const updateItemColor = (index: number, newColor: string) => {
+    // Validar stock antes de cambiar el color
+    const colorCounts: Record<string, number> = {};
+
+    // Contar colores actuales, considerando el cambio
+    localOrderItems.forEach((item, i) => {
+      const itemColor = i === index ? newColor : item.color;
+      colorCounts[itemColor] = (colorCounts[itemColor] || 0) + 1;
+    });
+
+    // Verificar que el nuevo color tenga stock suficiente
+    const newColorStock = getColorStock(newColor);
+    const newColorCount = colorCounts[newColor] || 0;
+
+    if (newColorCount > newColorStock) {
+      toast.error(
+        `Stock insuficiente para ${newColor}. Disponible: ${newColorStock}`
+      );
+      return;
+    }
+
     setLocalOrderItems((prev) => {
       const next = prev.map((it, i) =>
         i === index ? { ...it, color: newColor } : it
@@ -263,6 +430,14 @@ export const PurchaseModal = ({
   const purchase = usePurchase();
 
   const onSubmit = (data: FormData) => {
+    // Validar stock antes de procesar la compra
+    if (!validateItemsStock()) {
+      toast.error(
+        "Por favor verifica la disponibilidad de stock de los colores seleccionados"
+      );
+      return;
+    }
+
     // Si hay distritos disponibles para la provincia seleccionada, el distrito es obligatorio
     if (availableDistricts.length > 0 && !data.distrito) {
       form.setError("distrito", {
@@ -318,12 +493,13 @@ export const PurchaseModal = ({
           dni: shouldShowDNI ? data.dni : "", // Enviar DNI solo si debe mostrarse
         },
         items: localOrderItems.map((item) => ({
-          color: item.color,
+          color: colorMap[item.color] || item.color, // Convertir a español
           cantidad: item.quantity,
           precio_unitario: discountApplied
             ? item.unitPrice * (1 - DISCOUNT_PERCENTAGE / 100)
             : item.unitPrice,
         })),
+        productId: product?.id, // Pasar el product ID para validar y decrementar stock
       },
       {
         onSuccess: ({ order, customer, order_items }) => {
@@ -420,7 +596,7 @@ export const PurchaseModal = ({
   const handleQuantityChange = (increment: boolean) => {
     const currentQuantity = form.getValues("cantidad");
     const newQuantity = increment
-      ? Math.min(currentQuantity + 1, 5)
+      ? Math.min(currentQuantity + 1, totalAvailableStock)
       : Math.max(currentQuantity - 1, 1);
     form.setValue("cantidad", newQuantity, { shouldValidate: true });
 
@@ -874,7 +1050,7 @@ export const PurchaseModal = ({
                               <Input
                                 type="number"
                                 min="1"
-                                max="5"
+                                max={totalAvailableStock}
                                 className="h-12 text-center rounded-ios border-input focus:border-foreground"
                                 {...field}
                                 value={qty}
@@ -882,7 +1058,7 @@ export const PurchaseModal = ({
                                   const newQty = Math.max(
                                     1,
                                     Math.min(
-                                      5,
+                                      totalAvailableStock,
                                       Number.parseInt(e.target.value) || 1
                                     )
                                   );
@@ -898,7 +1074,7 @@ export const PurchaseModal = ({
                               type="button"
                               onClick={() => handleQuantityChange(true)}
                               className="w-12 h-12 rounded-full border border-input bg-background hover:bg-muted/50 flex items-center justify-center transition-colors"
-                              disabled={qty >= 5}
+                              disabled={qty >= totalAvailableStock}
                             >
                               <Plus className="w-4 h-4 text-foreground" />
                             </button>
@@ -914,10 +1090,20 @@ export const PurchaseModal = ({
                     <h4 className="text-sm font-medium text-foreground">
                       Selección de colores
                     </h4>
+
+                    {/* Alerta de error de stock */}
+                    {purchaseError && (
+                      <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                        {purchaseError}
+                      </div>
+                    )}
+
                     {qty === 1 ? (
                       <div>
                         <ColorSelector
                           selectedColor={currentColor}
+                          availableColors={availableColors}
+                          getColorStock={getColorStock}
                           onColorChange={(c) => {
                             setCurrentColor(c);
                             // Sincronizar con el componente padre
@@ -949,6 +1135,8 @@ export const PurchaseModal = ({
                             <div className="scale-75">
                               <ColorSelector
                                 selectedColor={item.color}
+                                availableColors={availableColors}
+                                getColorStock={getColorStock}
                                 onColorChange={(c) => updateItemColor(index, c)}
                               />
                             </div>
