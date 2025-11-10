@@ -472,7 +472,7 @@ export default function OrdersPage() {
   };
 
   const sendWebhookToN8N = async (order: Order) => {
-    const N8N_WEBHOOK_URL = import.meta.env.VITE_N8N_WEBHOOK_STATUS; // Reemplazar con URL real
+    const N8N_WEBHOOK_URL = import.meta.env.VITE_N8N_WEBHOOK_STATUS as string; // Reemplazar con URL real
 
     try {
       await fetch(N8N_WEBHOOK_URL, {
