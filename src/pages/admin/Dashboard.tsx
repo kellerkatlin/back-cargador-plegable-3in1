@@ -472,28 +472,34 @@ export default function OrdersPage() {
   };
 
   const sendWebhookToN8N = async (order: Order) => {
-    const N8N_WEBHOOK_URL = import.meta.env.VITE_N8N_WEBHOOK_STATUS as string; // Reemplazar con URL real
+    const N8N_WEBHOOK_URL = import.meta.env.VITE_N8N_WEBHOOK_STATUS as
+      | string
+      | undefined; // Reemplazar con URL real
 
     try {
-      await fetch(N8N_WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          order_id: order.id,
-          customer: order.customers,
-          order_items: order.order_items,
-          estado_pago: order.estado_pago,
-          estado_envio: order.estado_envio,
-          envio_provincia: order.envio_provincia,
-          total: order.total,
-          amount_paid: order.amount_paid,
-          amount_due: order.amount_due,
-          shipping_address: order.shipping_address,
-          order_number: order.order_number,
-          order_code: order.order_code,
-          created_at: order.created_at,
-        }),
-      });
+      if (N8N_WEBHOOK_URL) {
+        await fetch(N8N_WEBHOOK_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            order_id: order.id,
+            customer: order.customers,
+            order_items: order.order_items,
+            estado_pago: order.estado_pago,
+            estado_envio: order.estado_envio,
+            envio_provincia: order.envio_provincia,
+            total: order.total,
+            amount_paid: order.amount_paid,
+            amount_due: order.amount_due,
+            shipping_address: order.shipping_address,
+            order_number: order.order_number,
+            order_code: order.order_code,
+            created_at: order.created_at,
+          }),
+        });
+      } else {
+        console.warn("N8N webhook URL is not defined.");
+      }
     } catch (error) {
       console.error("Error enviando webhook a N8N:", error);
       // No mostrar error al usuario, solo loguearlo
