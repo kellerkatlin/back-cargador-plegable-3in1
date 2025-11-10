@@ -261,6 +261,7 @@ export default function OrdersPage() {
     shipping_address?: string;
     order_number?: string;
     order_code?: string;
+    pickup_password?: string;
   }) => {
     if (!pendingShippingOrder?.id) return;
 
@@ -452,9 +453,28 @@ export default function OrdersPage() {
               : ""
           }
 
-          
+          ${
+            order.pickup_password && order.envio_provincia
+              ? `
+          <div class="section">
+            <div class="section-title">Contraseña de Recojo</div>
+            <div class="section-content">
+              <strong style="font-size: 12pt; color: #e74c3c;">${order.pickup_password}</strong>
+            </div>
+          </div>
+          `
+              : ""
+          }
 
-         
+          ${
+            order.order_number
+              ? `
+          <div class="footer">
+            Código de tracking: <strong>${order.order_number}</strong>
+          </div>
+          `
+              : ""
+          }
           </div>
         </body>
       </html>
@@ -494,6 +514,7 @@ export default function OrdersPage() {
             shipping_address: order.shipping_address,
             order_number: order.order_number,
             order_code: order.order_code,
+            pickup_password: order.pickup_password,
             created_at: order.created_at,
           }),
         });

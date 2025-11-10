@@ -18,6 +18,7 @@ export interface Order {
   order_number?: string;
   order_code?: string;
   shipping_address?: string;
+  pickup_password?: string;
 }
 
 export interface OrderItem {

@@ -18,6 +18,7 @@ interface ShippingStatusModalProps {
     shipping_address?: string;
     order_number?: string;
     order_code?: string;
+    pickup_password?: string;
   }) => void;
   status: ShippingStatus;
   isProvincia: boolean;
@@ -33,12 +34,14 @@ export const ShippingStatusModal = ({
   const [shippingAddress, setShippingAddress] = useState("");
   const [orderNumber, setOrderNumber] = useState("");
   const [orderCode, setOrderCode] = useState("");
+  const [pickupPassword, setPickupPassword] = useState("");
 
   useEffect(() => {
     if (open) {
       setShippingAddress("");
       setOrderNumber("");
       setOrderCode("");
+      setPickupPassword("");
     }
   }, [open]);
 
@@ -49,6 +52,7 @@ export const ShippingStatusModal = ({
       shipping_address?: string;
       order_number?: string;
       order_code?: string;
+      pickup_password?: string;
     } = {};
 
     if (status === "preparado" && isProvincia && shippingAddress.trim()) {
@@ -58,6 +62,7 @@ export const ShippingStatusModal = ({
     if (status === "en_ruta" && isProvincia) {
       if (orderNumber.trim()) data.order_number = orderNumber.trim();
       if (orderCode.trim()) data.order_code = orderCode.trim();
+      if (pickupPassword.trim()) data.pickup_password = pickupPassword.trim();
     }
 
     onConfirm(data);
@@ -156,6 +161,22 @@ export const ShippingStatusModal = ({
                 />
                 <p className="text-xs text-muted-foreground">
                   Código alternativo de seguimiento
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="pickup-password">
+                  Contraseña de Recojo (Opcional)
+                </Label>
+                <Input
+                  id="pickup-password"
+                  type="text"
+                  placeholder="Ej: 1234"
+                  value={pickupPassword}
+                  onChange={(e) => setPickupPassword(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Código de seguridad para recoger el paquete
                 </p>
               </div>
             </>
