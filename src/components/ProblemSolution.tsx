@@ -163,7 +163,6 @@ export const ProblemSolution = () => {
                 <ul className="space-y-3">
                   {[
                     "Carga 3 dispositivos simultáneamente sin cables",
-                    "10,000 mAh para días completos sin preocupaciones",
                     "Compatible con iPhone, Android, Watch y AirPods",
                     "Diseño compacto y portátil perfecto para viajar",
                   ].map((item) => (

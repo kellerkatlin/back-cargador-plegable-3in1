@@ -31,9 +31,8 @@ const testimonials: Testimonial[] = [
     department: "Lima",
     rating: 5,
     comment:
-      "¡Increíble! Ya no cargo con múltiples cables. El producto es súper compacto y carga mis tres dispositivos a la vez. La mejor compra del año.",
-    // image: "/src/assets/testimonial1.webp",
-    // productImage: "/src/assets/blanco.webp",
+      "Muy práctico. Ya no tengo que cargar varios cables y puedo conectar mis tres equipos al mismo tiempo. Compacto y útil para el día a día.",
+    productImage: "/src/assets/comentarios/comentario1.webp",
     date: "Hace 2 días",
   },
   {
@@ -41,10 +40,9 @@ const testimonials: Testimonial[] = [
     name: "Carlos Ramírez",
     department: "Arequipa",
     rating: 5,
+    productImage: "/src/assets/comentarios/comentario2.webp",
     comment:
-      "Excelente calidad y muy rápida la carga. Lo uso todos los días para mi iPhone y AirPods. El diseño es elegante y moderno. 100% recomendado.",
-    // image: "/src/assets/testimonial2.webp",
-    // productImage: "/src/assets/negro.webp",
+      "Buena calidad y carga rápida. Lo uso diario con mi iPhone y AirPods, el diseño se ve moderno. Recomendado.",
     date: "Hace 5 días",
   },
   {
@@ -52,10 +50,10 @@ const testimonials: Testimonial[] = [
     name: "Ana Sofía Torres",
     department: "Lima",
     rating: 4.5,
+    productImage: "/src/assets/comentarios/comentario5.webp",
+
     comment:
-      "Me encanta lo portátil que es. Perfecto para viajar. La batería dura mucho más de lo que esperaba. Solo le daría 4.5 estrellas porque el precio es un poco alto, pero vale la pena.",
-    // image: "/src/assets/testimonial3.webp",
-    // productImage: "/src/assets/gris.webp",
+      "Es muy cómodo para viajes y la batería dura bastante. Un poco caro, pero al final vale lo que cuesta.",
     date: "Hace 1 semana",
   },
   {
@@ -63,10 +61,9 @@ const testimonials: Testimonial[] = [
     name: "Diego Martínez",
     department: "Piura",
     rating: 5,
+    productImage: "/src/assets/comentarios/comentario3.webp",
     comment:
-      "La carga inalámbrica funciona perfecto con mi Samsung. Ya no necesito llevar cables al trabajo. La inversión valió cada peso.",
-    // image: "/src/assets/testimonial4.webp",
-    // productImage: "/src/assets/plateado.webp",
+      "Funciona bien con mi iPhone y ya no necesito cables en el trabajo. Estoy satisfecho con la compra.",
     date: "Hace 1 semana",
   },
   {
@@ -75,9 +72,7 @@ const testimonials: Testimonial[] = [
     department: "Lima",
     rating: 4,
     comment:
-      "Buen producto, cumple con lo prometido. Me gusta que puedo cargar mi reloj mientras cargo el celular. La capacidad de 10,000 mAh es suficiente para todo el día.",
-    image: "/src/assets/problema.webp",
-    // productImage: "/src/assets/blanco.webp",
+      "Cumple con lo que promete. Me gusta que puedo cargar el reloj y el celular al mismo tiempo.",
     date: "Hace 2 semanas",
   },
   {
@@ -85,10 +80,8 @@ const testimonials: Testimonial[] = [
     name: "Andrés López",
     department: "Lambayeque",
     rating: 5,
-    comment:
-      "Súper práctico y eficiente. Lo llevo en la mochila todos los días. La carga rápida de 15W es impresionante. Mi teléfono carga en menos de una hora.",
-    image: "/src/assets/problema.webp",
-    // productImage: "/src/assets/negro.webp",
+    productImage: "/src/assets/comentarios/comentario4.webp",
+    comment: "Muy buen producto, cumple con mis expectativas.",
     date: "Hace 2 semanas",
   },
   {
@@ -96,10 +89,7 @@ const testimonials: Testimonial[] = [
     name: "Valentina Ruiz",
     department: "Junín",
     rating: 4.5,
-    comment:
-      "Me salvó en un viaje largo. Pude cargar mi teléfono, tablet y auriculares sin problema. El diseño en gris es hermoso. Muy satisfecha con la compra.",
-    image: "/src/assets/problema.webp",
-    // productImage: "/src/assets/gris.webp",
+    comment: "El color gris se ve elegante.",
     date: "Hace 3 semanas",
   },
   {
@@ -108,9 +98,7 @@ const testimonials: Testimonial[] = [
     department: "Ancash",
     rating: 5,
     comment:
-      "Lo mejor que he comprado este año. Carga rápido y es muy ligero. Perfecto para llevar en el bolsillo. El soporte magnético es excelente.",
-    // image: "/src/assets/testimonial8.webp",
-    // productImage: "/src/assets/plateado.webp",
+      "Carga rápido y es liviano. Ideal para llevar en el bolsillo. El imán sujeta bien el celular.",
     date: "Hace 3 semanas",
   },
 ];
@@ -292,7 +280,7 @@ export const Testimonials = () => {
                   <img
                     src={testimonial.productImage}
                     alt="Foto del producto"
-                    className="w-full h-48 object-cover"
+                    className="w-full h-96 object-cover"
                   />
                 </div>
               )}
