@@ -4,6 +4,11 @@ import { Star, Quote, Send, Image as ImageIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import comentario1 from "@/assets/comentarios/comentario1.webp";
+import comentario2 from "@/assets/comentarios/comentario2.webp";
+import comentario3 from "@/assets/comentarios/comentario3.webp";
+import comentario4 from "@/assets/comentarios/comentario4.webp";
+import comentario5 from "@/assets/comentarios/comentario5.webp";
 
 interface Testimonial {
   id: number;
@@ -32,7 +37,7 @@ const testimonials: Testimonial[] = [
     rating: 5,
     comment:
       "Muy práctico. Ya no tengo que cargar varios cables y puedo conectar mis tres equipos al mismo tiempo. Compacto y útil para el día a día.",
-    productImage: "/src/assets/comentarios/comentario1.webp",
+    productImage: comentario1,
     date: "Hace 2 días",
   },
   {
@@ -40,7 +45,7 @@ const testimonials: Testimonial[] = [
     name: "Carlos Ramírez",
     department: "Arequipa",
     rating: 5,
-    productImage: "/src/assets/comentarios/comentario2.webp",
+    productImage: comentario2,
     comment:
       "Buena calidad y carga rápida. Lo uso diario con mi iPhone y AirPods, el diseño se ve moderno. Recomendado.",
     date: "Hace 5 días",
@@ -50,7 +55,7 @@ const testimonials: Testimonial[] = [
     name: "Ana Sofía Torres",
     department: "Lima",
     rating: 4.5,
-    productImage: "/src/assets/comentarios/comentario5.webp",
+    productImage: comentario5,
 
     comment:
       "Es muy cómodo para viajes y la batería dura bastante. Un poco caro, pero al final vale lo que cuesta.",
@@ -61,7 +66,7 @@ const testimonials: Testimonial[] = [
     name: "Diego Martínez",
     department: "Piura",
     rating: 5,
-    productImage: "/src/assets/comentarios/comentario3.webp",
+    productImage: comentario3,
     comment:
       "Funciona bien con mi iPhone y ya no necesito cables en el trabajo. Estoy satisfecho con la compra.",
     date: "Hace 1 semana",
@@ -80,7 +85,7 @@ const testimonials: Testimonial[] = [
     name: "Andrés López",
     department: "Lambayeque",
     rating: 5,
-    productImage: "/src/assets/comentarios/comentario4.webp",
+    productImage: comentario4,
     comment: "Muy buen producto, cumple con mis expectativas.",
     date: "Hace 2 semanas",
   },
