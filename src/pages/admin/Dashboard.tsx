@@ -58,6 +58,7 @@ export default function OrdersPage() {
       en_ruta: "bg-purple-100 text-purple-800 border-purple-300",
       en_agencia: "bg-indigo-100 text-indigo-800 border-indigo-300",
       entregado: "bg-green-100 text-green-800 border-green-300",
+      cancelado: "bg-red-100 text-red-800 border-red-300",
     };
     return colors[status] || "bg-gray-100 text-gray-800 border-gray-300";
   };
@@ -140,7 +141,97 @@ export default function OrdersPage() {
     return () => clearTimeout(delayDebounce);
   }, [searchTerm]);
 
+  // Función para restaurar el stock cuando se cancela un pedido
+  const restoreStock = async (order: Order) => {
+    try {
+      const orderItems = order.order_items;
+      if (!orderItems || orderItems.length === 0) return;
+
+      // Mapeo de colores UI a nombres de variantes en DB
+      const colorNameMap: Record<string, string> = {
+        White: "Blanco",
+        Gray: "Gris",
+        Black: "Negro",
+        Silvery: "Plateado",
+        Blanco: "Blanco",
+        Gris: "Gris",
+        Negro: "Negro",
+        Plateado: "Plateado",
+      };
+
+      for (const item of orderItems) {
+        const colorDB = colorNameMap[item.color] || item.color;
+
+        // Obtener el producto variant actual
+        const { data: variant, error: fetchError } = await supabase
+          .from("product_variants")
+          .select("stock")
+          .eq("color", colorDB)
+          .single();
+
+        if (fetchError) {
+          console.error(`Error al obtener stock de ${colorDB}:`, fetchError);
+          continue;
+        }
+
+        // Sumar el stock de vuelta
+        const newStock = variant.stock + item.cantidad;
+
+        const { error: updateError } = await supabase
+          .from("product_variants")
+          .update({ stock: newStock })
+          .eq("color", colorDB);
+
+        if (updateError) {
+          console.error(`Error al restaurar stock de ${colorDB}:`, updateError);
+        } else {
+          console.log(
+            `✅ Stock restaurado: ${colorDB} +${item.cantidad} = ${newStock}`
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Error al restaurar stock:", error);
+      alert(
+        "Error al restaurar el stock. Por favor contacta al administrador."
+      );
+    }
+  };
+
   const updateEnvio = async (order: Order, estado: ShippingStatus) => {
+    // Si el pedido ya está cancelado, no permitir cambios
+    if (order.estado_envio === "cancelado") {
+      alert("No se puede cambiar el estado de un pedido cancelado.");
+      return;
+    }
+
+    // Si se intenta cancelar, confirmar y restaurar stock
+    if (estado === "cancelado") {
+      const confirmCancel = window.confirm(
+        "¿Estás seguro de cancelar este pedido? Se restaurará el stock y no podrás revertir esta acción."
+      );
+
+      if (!confirmCancel) return;
+
+      // Restaurar el stock
+      await restoreStock(order);
+
+      // Actualizar el estado a cancelado
+      if (order.id) {
+        await supabase
+          .from("orders")
+          .update({ estado_envio: "cancelado" })
+          .eq("id", order.id);
+
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === order.id ? { ...o, estado_envio: "cancelado" } : o
+          )
+        );
+      }
+      return;
+    }
+
     // Estados que requieren modal: preparado, en_ruta, en_agencia, entregado
     const requiresModal = [
       "preparado",
@@ -682,15 +773,18 @@ export default function OrdersPage() {
               const order = row.original;
               if (!order.id) return null;
 
+              const isCanceled = order.estado_envio === "cancelado";
+
               return (
                 <Select
                   defaultValue={order.estado_pago}
                   onValueChange={(val: PaymentStatus) => updatePago(order, val)}
+                  disabled={isCanceled}
                 >
                   <SelectTrigger
                     className={`w-[140px] border ${getPaymentStatusColor(
                       order.estado_pago
-                    )}`}
+                    )} ${isCanceled ? "opacity-70 cursor-not-allowed" : ""}`}
                   >
                     <SelectValue />
                   </SelectTrigger>
@@ -727,17 +821,20 @@ export default function OrdersPage() {
               const order = row.original;
               if (!order.id) return null;
 
+              const isCanceled = order.estado_envio === "cancelado";
+
               return (
                 <Select
                   defaultValue={order.estado_envio}
                   onValueChange={(val: ShippingStatus) =>
                     updateEnvio(order, val)
                   }
+                  disabled={isCanceled}
                 >
                   <SelectTrigger
                     className={`w-[140px] border ${getShippingStatusColor(
                       order.estado_envio
-                    )}`}
+                    )} ${isCanceled ? "opacity-70 cursor-not-allowed" : ""}`}
                   >
                     <SelectValue />
                   </SelectTrigger>
@@ -772,6 +869,12 @@ export default function OrdersPage() {
                       <span className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-green-500"></span>
                         Entregado
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="cancelado">
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                        Cancelado
                       </span>
                     </SelectItem>
                   </SelectContent>

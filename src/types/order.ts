@@ -51,4 +51,5 @@ export type ShippingStatus =
   | "preparado"
   | "en_ruta"
   | "en_agencia"
-  | "entregado";
+  | "entregado"
+  | "cancelado";
