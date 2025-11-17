@@ -21,8 +21,10 @@ export const OnlineUsersWidget = () => {
     const fetchOnlineUsers = async () => {
       try {
         // Obtener usuarios activos (últimos 5 minutos) SOLO de páginas públicas (no admin)
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-        
+        const fiveMinutesAgo = new Date(
+          Date.now() - 5 * 60 * 1000
+        ).toISOString();
+
         const { data, error } = await supabase
           .from("user_presence")
           .select("*")
@@ -178,7 +180,9 @@ export const OnlineUsersWidget = () => {
                   <div className="flex items-center gap-1.5">
                     <div
                       className={`w-2 h-2 rounded-full ${
-                        timeDiff < 60 ? "bg-green-500 animate-pulse" : "bg-yellow-500"
+                        timeDiff < 60
+                          ? "bg-green-500 animate-pulse"
+                          : "bg-yellow-500"
                       }`}
                     />
                     <span className="text-lg">
@@ -189,7 +193,7 @@ export const OnlineUsersWidget = () => {
                     <p className="text-sm font-medium truncate">
                       {getPageName(user.page_path)}
                     </p>
-                    
+
                     {/* Ubicación */}
                     <div className="flex items-center gap-1 mt-0.5">
                       <MapPin className="w-3 h-3 text-muted-foreground flex-shrink-0" />

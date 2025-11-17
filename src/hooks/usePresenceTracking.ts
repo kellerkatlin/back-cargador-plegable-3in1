@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useEffect, useRef } from "react";
+import { supabase } from "@/lib/supabase";
 
 interface LocationData {
   ip: string;
@@ -15,7 +15,7 @@ export const usePresenceTracking = () => {
   useEffect(() => {
     // Solo trackear si NO estamos en rutas de admin
     const currentPath = window.location.pathname;
-    if (currentPath.startsWith('/admin')) {
+    if (currentPath.startsWith("/admin")) {
       return; // No trackear rutas de admin
     }
 
@@ -32,16 +32,16 @@ export const usePresenceTracking = () => {
       if (locationDataRef.current) return;
 
       try {
-        const response = await fetch('https://ipapi.co/json/');
+        const response = await fetch("https://ipapi.co/json/");
         const data: LocationData = await response.json();
         locationDataRef.current = data;
       } catch (error) {
-        console.error('Error fetching location:', error);
+        console.error("Error fetching location:", error);
         locationDataRef.current = {
-          ip: 'Unknown',
-          city: 'Unknown',
-          region: 'Unknown',
-          country_name: 'Unknown',
+          ip: "Unknown",
+          city: "Unknown",
+          region: "Unknown",
+          country_name: "Unknown",
         };
       }
     };
@@ -50,7 +50,7 @@ export const usePresenceTracking = () => {
     const updatePresence = async () => {
       // Verificar nuevamente que no estamos en admin
       const path = window.location.pathname;
-      if (path.startsWith('/admin')) {
+      if (path.startsWith("/admin")) {
         return;
       }
 
@@ -60,20 +60,23 @@ export const usePresenceTracking = () => {
       }
 
       try {
-        await supabase.from('user_presence').upsert({
-          session_id: sessionId,
-          page_path: path,
-          last_seen: new Date().toISOString(),
-          user_agent: userAgent,
-          ip_address: locationDataRef.current?.ip,
-          city: locationDataRef.current?.city,
-          region: locationDataRef.current?.region,
-          country: locationDataRef.current?.country_name,
-        }, {
-          onConflict: 'session_id'
-        });
+        await supabase.from("user_presence").upsert(
+          {
+            session_id: sessionId,
+            page_path: path,
+            last_seen: new Date().toISOString(),
+            user_agent: userAgent,
+            ip_address: locationDataRef.current?.ip,
+            city: locationDataRef.current?.city,
+            region: locationDataRef.current?.region,
+            country: locationDataRef.current?.country_name,
+          },
+          {
+            onConflict: "session_id",
+          }
+        );
       } catch (error) {
-        console.error('Error updating presence:', error);
+        console.error("Error updating presence:", error);
       }
     };
 
@@ -86,22 +89,23 @@ export const usePresenceTracking = () => {
     // Actualizar al cambiar de página
     const handlePageChange = () => {
       // Solo actualizar si no es ruta de admin
-      if (!window.location.pathname.startsWith('/admin')) {
+      if (!window.location.pathname.startsWith("/admin")) {
         updatePresence();
       }
     };
-    window.addEventListener('popstate', handlePageChange);
+    window.addEventListener("popstate", handlePageChange);
 
     // Limpiar al desmontar
     return () => {
       clearInterval(interval);
-      window.removeEventListener('popstate', handlePageChange);
-      
+      window.removeEventListener("popstate", handlePageChange);
+
       // Eliminar presencia al cerrar
-      supabase.from('user_presence')
+      supabase
+        .from("user_presence")
         .delete()
-        .eq('session_id', sessionId)
-        .then(() => console.log('Presencia eliminada'));
+        .eq("session_id", sessionId)
+        .then(() => console.log("Presencia eliminada"));
     };
   }, []);
 };
