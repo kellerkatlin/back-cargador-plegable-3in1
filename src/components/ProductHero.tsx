@@ -92,7 +92,7 @@ export const ProductHero = () => {
   const [orderItems, setOrderItems] = useState<CartItem[]>([]);
 
   // Fetch product variants from Supabase (todas las variantes, activas e inactivas)
-  const { product } = useProduct();
+  const { product } = useProduct({ productId: "e63b582a-d138-46dc-9a7f-55ef3c84a538" });
 
   // Obtener variante del color seleccionado
 

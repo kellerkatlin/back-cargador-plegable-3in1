@@ -38,7 +38,7 @@ import { useProduct } from "@/hooks/useProduct";
 import type { ProductVariant } from "@/types/product";
 import { toast } from "sonner";
 
-const PRODUCT_ID = "charger_typec_lightning";
+const PRODUCT_ID = "e63b582a-d138-46dc-9a7f-55ef3c84a538";
 const BASE_PRICE = 159.9;
 const TIER_PRICE_2PLUS = 149.9;
 const DISCOUNT_PERCENTAGE = 8; // Porcentaje de descuento especial
@@ -118,7 +118,7 @@ export const PurchaseModal = ({
   const [purchaseError, setPurchaseError] = useState<string | null>(null);
 
   // Obtener información de producto y variantes desde Supabase
-  const { product } = useProduct();
+  const { product } = useProduct({ productId: PRODUCT_ID });
 
   // Función para obtener el stock de un color específico
   const getColorStock = useCallback(
