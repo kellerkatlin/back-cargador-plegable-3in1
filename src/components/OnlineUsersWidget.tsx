@@ -3,7 +3,8 @@ import { supabase } from "@/lib/supabase";
 import { Users, Activity, MapPin } from "lucide-react";
 
 interface UserPresence {
-  session_id: string;
+  ip_address: string;
+  session_id?: string;
   page_path: string;
   last_seen: string;
   user_agent: string;
@@ -173,7 +174,7 @@ export const OnlineUsersWidget = () => {
 
             return (
               <div
-                key={user.session_id}
+                key={user.ip_address}
                 className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
               >
                 <div className="flex items-center gap-3 flex-1 min-w-0">

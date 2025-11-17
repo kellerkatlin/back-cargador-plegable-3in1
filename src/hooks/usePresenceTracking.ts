@@ -9,7 +9,7 @@ interface LocationData {
 }
 
 export const usePresenceTracking = () => {
-  const sessionIdRef = useRef<string | undefined>(undefined);
+  const ipAddressRef = useRef<string | undefined>(undefined);
   const locationDataRef = useRef<LocationData | null>(null);
 
   useEffect(() => {
@@ -19,12 +19,6 @@ export const usePresenceTracking = () => {
       return; // No trackear rutas de admin
     }
 
-    // Generar ID único de sesión
-    if (!sessionIdRef.current) {
-      sessionIdRef.current = crypto.randomUUID();
-    }
-
-    const sessionId = sessionIdRef.current;
     const userAgent = navigator.userAgent;
 
     // Obtener ubicación por IP (solo una vez)
@@ -35,6 +29,7 @@ export const usePresenceTracking = () => {
         const response = await fetch("https://ipapi.co/json/");
         const data: LocationData = await response.json();
         locationDataRef.current = data;
+        ipAddressRef.current = data.ip;
       } catch (error) {
         console.error("Error fetching location:", error);
         locationDataRef.current = {
@@ -43,6 +38,7 @@ export const usePresenceTracking = () => {
           region: "Unknown",
           country_name: "Unknown",
         };
+        ipAddressRef.current = "Unknown";
       }
     };
 
@@ -59,20 +55,21 @@ export const usePresenceTracking = () => {
         await fetchLocation();
       }
 
+      if (!ipAddressRef.current) return;
+
       try {
         await supabase.from("user_presence").upsert(
           {
-            session_id: sessionId,
+            ip_address: ipAddressRef.current,
             page_path: path,
             last_seen: new Date().toISOString(),
             user_agent: userAgent,
-            ip_address: locationDataRef.current?.ip,
             city: locationDataRef.current?.city,
             region: locationDataRef.current?.region,
             country: locationDataRef.current?.country_name,
           },
           {
-            onConflict: "session_id",
+            onConflict: "ip_address",
           }
         );
       } catch (error) {
@@ -101,11 +98,13 @@ export const usePresenceTracking = () => {
       window.removeEventListener("popstate", handlePageChange);
 
       // Eliminar presencia al cerrar
-      supabase
-        .from("user_presence")
-        .delete()
-        .eq("session_id", sessionId)
-        .then(() => console.log("Presencia eliminada"));
+      if (ipAddressRef.current) {
+        supabase
+          .from("user_presence")
+          .delete()
+          .eq("ip_address", ipAddressRef.current)
+          .then(() => console.log("Presencia eliminada"));
+      }
     };
   }, []);
 };
