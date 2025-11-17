@@ -7,6 +7,7 @@ import { CustomerModal } from "@/components/CustomerModal";
 import { OrderModal } from "@/components/OrderModal";
 import { PaymentModal } from "@/components/PaymentModal";
 import { ShippingStatusModal } from "@/components/ShippingStatusModal";
+import { OnlineUsersWidget } from "@/components/OnlineUsersWidget";
 import { LogOut, Printer } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -631,8 +632,8 @@ export default function OrdersPage() {
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold">Pedidos</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Panel de Administración</h1>
         <Button
           variant="outline"
           onClick={handleLogout}
@@ -642,6 +643,13 @@ export default function OrdersPage() {
           Cerrar Sesión
         </Button>
       </div>
+
+      {/* Widget de usuarios en línea */}
+      <div className="mb-6">
+        <OnlineUsersWidget />
+      </div>
+
+      <h2 className="text-2xl font-bold mb-4">Pedidos</h2>
 
       <div className="mb-4">
         <Input
