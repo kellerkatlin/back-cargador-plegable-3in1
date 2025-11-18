@@ -88,10 +88,11 @@ export default function OrdersPage() {
       try {
         const term = searchTerm.trim();
 
-        // Traer todas las órdenes primero
+        // Traer todas las órdenes filtradas por store_id
         const { data, error } = await supabase
           .from("orders")
           .select("*, customers(*), order_items(*)")
+          .eq("store_id", "0b22b271-7011-47b2-8dc6-0269784ccb38")
           .order("created_at", { ascending: false });
 
         if (error) {
