@@ -978,7 +978,7 @@ export const ProductHero = () => {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 80, opacity: 0 }}
               transition={{ duration: 0.3 }}
-              className="fixed left-0 right-0 bottom-0 z-50"
+              className="fixed left-0 right-0 -bottom-1 z-50"
             >
               <div className="container mx-auto px-4 pb-[env(safe-area-inset-bottom)]">
                 <div className="p-3">
