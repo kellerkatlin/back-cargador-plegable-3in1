@@ -39,8 +39,9 @@ import type { ProductVariant } from "@/types/product";
 import { toast } from "sonner";
 
 const PRODUCT_ID = "e63b582a-d138-46dc-9a7f-55ef3c84a538";
-const BASE_PRICE = 159.9;
-const TIER_PRICE_2PLUS = 149.9;
+// BLACK FRIDAY PRICES (20-31 Nov) - Antes: 159.9 / 149.9
+const BASE_PRICE = 149.9;
+const TIER_PRICE_2PLUS = 139.9;
 const DISCOUNT_PERCENTAGE = 8; // Porcentaje de descuento especial
 
 // Mapeo de colores UI a nombres de variantes en DB

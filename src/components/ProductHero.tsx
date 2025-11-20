@@ -30,6 +30,7 @@ import { useProduct } from "@/hooks/useProduct";
 import type { ProductVariant } from "@/types/product";
 import { averageRating, totalReviews } from "@/data/testimonials";
 import { toast } from "sonner";
+import { track } from "@/lib/pixel";
 
 const productImages = {
   White: blancoImage,
@@ -92,7 +93,9 @@ export const ProductHero = () => {
   const [orderItems, setOrderItems] = useState<CartItem[]>([]);
 
   // Fetch product variants from Supabase (todas las variantes, activas e inactivas)
-  const { product } = useProduct({ productId: "e63b582a-d138-46dc-9a7f-55ef3c84a538" });
+  const { product } = useProduct({
+    productId: "e63b582a-d138-46dc-9a7f-55ef3c84a538",
+  });
 
   // Obtener variante del color seleccionado
 
@@ -151,9 +154,9 @@ export const ProductHero = () => {
 
   // Validar stock de items seleccionados
 
-  // Precios hardcoded (NO desde Supabase)
-  const pricePerUnit1 = 159.9; // Precio para 1 unidad
-  const pricePerUnit2Plus = 149.9; // Precio por unidad para 2+ unidades
+  // Precios BLACK FRIDAY (20-31 Nov)
+  const pricePerUnit1 = 149.9; // Precio para 1 unidad (antes 159.9)
+  const pricePerUnit2Plus = 139.9; // Precio por unidad para 2+ unidades (antes 149.9)
   const originalPricePerUnit = 239.85; // Precio original tachado
 
   // Calcular precio unitario basado en la cantidad
@@ -279,6 +282,21 @@ export const ProductHero = () => {
   // Función para abrir modal
   const openPurchaseModal = () => {
     setIsModalOpen(true);
+
+    // Disparar evento AddToCart de Meta Pixel
+    track("AddToCart", {
+      content_name: "Cargador Plegable 3 en 1 de 15W",
+      content_ids: ["e63b582a-d138-46dc-9a7f-55ef3c84a538"],
+      content_type: "product",
+      value: totalPrice,
+      currency: "PEN",
+      contents: orderItems.map((item) => ({
+        id: "e63b582a-d138-46dc-9a7f-55ef3c84a538",
+        quantity: item.quantity,
+        item_price: item.unitPrice,
+      })),
+      num_items: quantity,
+    });
   };
 
   // Mostrar notificaciones de compras recientes aleatorias
@@ -535,7 +553,7 @@ export const ProductHero = () => {
   return (
     <>
       {/* Product Section */}
-      <section id="producto" className="py-6 mt-5 sm:py-12">
+      <section id="producto" className="py-6 mt-7 md:mt-10 sm:py-12">
         <div className="w-full max-w-7xl mx-auto px-6">
           <div className="grid lg:grid-cols-2 gap-6 lg:gap-12 items-start">
             {/* Product Image */}
@@ -754,7 +772,7 @@ export const ProductHero = () => {
                     variant="destructive"
                     className="text-xs -mt-3 sm:text-sm"
                   >
-                    {quantity >= 2 ? "60% OFF" : "50% OFF"}
+                    60% OFF
                   </Badge>
                 </div>
 
@@ -801,7 +819,7 @@ export const ProductHero = () => {
                     🎁 Descuento extra al comprar 2 o más unidades
                   </Badge>
                   <span className="text-[11px] sm:text-xs text-gray-500">
-                    Oferta por tiempo limitado
+                    🔥 Solo Black Friday (20-31 Nov)
                   </span>
                 </div>
               </section>
