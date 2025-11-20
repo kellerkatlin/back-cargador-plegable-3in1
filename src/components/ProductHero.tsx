@@ -322,19 +322,27 @@ export const ProductHero = () => {
       );
     };
 
-    // Mostrar primera notificación después de 5 segundos
+    // IDs para limpiar timeouts
+    let nextTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNext = () => {
+      // Retardo aleatorio entre 20s y 30s
+      const delay = Math.random() * 10000 + 20000;
+      nextTimeoutId = setTimeout(() => {
+        showRandomPurchaseNotification();
+        scheduleNext();
+      }, delay);
+    };
+
+    // Inicia a los 8 segundos y luego programa recursivamente entre 20-30s
     const firstTimeout = setTimeout(() => {
       showRandomPurchaseNotification();
-    }, 5000);
-
-    // Luego mostrar notificaciones cada 15-25 segundos (aleatorio)
-    const intervalId = setInterval(() => {
-      showRandomPurchaseNotification();
-    }, Math.random() * 10000 + 15000); // Entre 15 y 25 segundos
+      scheduleNext();
+    }, 8000);
 
     return () => {
       clearTimeout(firstTimeout);
-      clearInterval(intervalId);
+      if (nextTimeoutId) clearTimeout(nextTimeoutId);
     };
   }, []);
 
@@ -553,7 +561,7 @@ export const ProductHero = () => {
   return (
     <>
       {/* Product Section */}
-      <section id="producto" className="py-6 mt-7 md:mt-10 sm:py-12">
+      <section id="producto" className="py-6 mt-8 md:mt-12 sm:py-12">
         <div className="w-full max-w-7xl mx-auto px-6">
           <div className="grid lg:grid-cols-2 gap-6 lg:gap-12 items-start">
             {/* Product Image */}
