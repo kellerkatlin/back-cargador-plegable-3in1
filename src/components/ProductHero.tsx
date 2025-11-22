@@ -154,7 +154,7 @@ export const ProductHero = () => {
 
   // Validar stock de items seleccionados
 
-  // Precios BLACK FRIDAY (20-31 Nov)
+  // Precios BLACK FRIDAY (20-30 Nov)
   const pricePerUnit1 = 149.9; // Precio para 1 unidad (antes 159.9)
   const pricePerUnit2Plus = 139.9; // Precio por unidad para 2+ unidades (antes 149.9)
   const originalPricePerUnit = 239.85; // Precio original tachado
@@ -827,7 +827,7 @@ export const ProductHero = () => {
                     🎁 Descuento extra al comprar 2 o más unidades
                   </Badge>
                   <span className="text-[11px] sm:text-xs text-gray-500">
-                    🔥 Solo Black Friday (20-31 Nov)
+                    🔥 Solo Black Friday (20-30 Nov)
                   </span>
                 </div>
               </section>
