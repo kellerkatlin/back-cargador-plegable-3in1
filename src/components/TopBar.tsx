@@ -45,7 +45,7 @@ const blackFridayMessages: Message[] = [
   {
     id: "bf-2",
     icon: "⚡",
-    text: "Solo del 20 al 31 de Noviembre",
+    text: "Solo del 20 al 30 de Noviembre",
   },
   {
     id: "bf-3",
